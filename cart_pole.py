@@ -2,7 +2,6 @@ import os
 os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 import random
 import gymnasium as gym
-gym.logger.set_level(40)
 import numpy as np
 from collections import deque
 from keras.models import Model, load_model
@@ -34,7 +33,8 @@ def LeModel(input_shape, action_space):
 
 class DQNAgent:
     def __init__(self):
-        self.env = gym.make('CartPole-v1')
+        #self.env = gym.make('CartPole-v1', render_mode="human")
+        self.env = gym.make('CartPole-v1') # No visualization, so sad but so fast
         # by default, CartPole-v1 has max episode steps = 500
         self.state_size = self.env.observation_space.shape[0]
         self.action_size = self.env.action_space.n
@@ -61,7 +61,7 @@ class DQNAgent:
         if np.random.random() <= self.epsilon:
             return random.randrange(self.action_size)
         else:
-            return np.argmax(self.model.predict(state))
+            return np.argmax(self.model.predict(state, verbose = 0))
 
     def replay(self):
         if len(self.memory) < self.train_start:
@@ -81,8 +81,8 @@ class DQNAgent:
             terminated.append(minibatch[i][4])
 
         # do batch prediction to save speed
-        target = self.model.predict(state)
-        target_next = self.model.predict(next_state)
+        target = self.model.predict(state, verbose = 0)
+        target_next = self.model.predict(next_state, verbose = 0)
 
         for i in range(self.batch_size):
             # correction on the Q value for the action used
@@ -141,7 +141,7 @@ class DQNAgent:
             i = 0
             while not terminated:
                 self.env.render()
-                action = np.argmax(self.model.predict(state))
+                action = np.argmax(self.model.predict(state, verbose = 0))
                 next_state, reward, terminated, truncated, info = self.env.step(action)
                 state = np.reshape(next_state[0], [1, self.state_size])
                 i += 1

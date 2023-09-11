@@ -8,7 +8,6 @@ from keras.models import Model, load_model
 from keras.layers import Input, Dense
 from keras.optimizers import Adam, RMSprop
 
-
 def LeModel(input_shape, action_space):
     X_input = Input(input_shape)
 
@@ -98,7 +97,6 @@ class DQNAgent:
         # Train the Neural Network with batches
         self.model.fit(state, target, batch_size=self.batch_size, verbose=0)
 
-
     def load(self, name):
         self.model = load_model(name)
 
@@ -126,7 +124,7 @@ class DQNAgent:
                 i += 1
                 if terminated:                   
                     print("episode: {}/{}, score: {}, e: {:.2}".format(e, self.EPISODES, i, self.epsilon))
-                    if i == 500:
+                    if i >= 500:
                         print("Saving trained model as cartpole-dqn.keras")
                         self.save("data/cartpole-dqn.keras")
                         return

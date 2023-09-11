@@ -5,6 +5,9 @@ GymnasiumVENV/
 
 *.pkl
 *.pth
+*.h5
+*.keras
+data/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

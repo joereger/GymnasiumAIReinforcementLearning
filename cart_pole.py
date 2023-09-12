@@ -3,10 +3,12 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 import random
 import gymnasium as gym
 import numpy as np
+import tensorflow as tf
 from collections import deque
 from keras.models import Model, load_model
 from keras.layers import Input, Dense
-from keras.optimizers import Adam, RMSprop
+from keras.optimizers import Adam
+from keras.optimizers.legacy import RMSprop
 
 def LeModel(input_shape, action_space):
     X_input = Input(input_shape)
@@ -25,15 +27,15 @@ def LeModel(input_shape, action_space):
     X = Dense(action_space, activation="linear", kernel_initializer='he_uniform')(X)
 
     model = Model(inputs = X_input, outputs = X, name='CartPole_DQN_Model')
-    model.compile(loss="mse", optimizer=RMSprop(lr=0.00025, rho=0.95, epsilon=0.01), metrics=["accuracy"])
+    model.compile(loss='mse', optimizer=RMSprop(lr=0.00025, rho=0.95, epsilon=0.01), metrics=["accuracy"])
 
     model.summary()
     return model
 
 class DQNAgent:
     def __init__(self):
-        #self.env = gym.make('CartPole-v1', render_mode="human")
-        self.env = gym.make('CartPole-v1') # No visualization, so sad but so fast
+        self.env = gym.make('CartPole-v1', render_mode="human")
+        #self.env = gym.make('CartPole-v1') # No visualization, so sad but so fast
         # by default, CartPole-v1 has max episode steps = 500
         self.state_size = self.env.observation_space.shape[0]
         self.action_size = self.env.action_space.n

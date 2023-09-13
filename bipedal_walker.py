@@ -5,6 +5,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from collections import deque
 from torch.distributions import Normal
+import pygame
 
 # Actor Network
 class ActorNetwork(nn.Module):
@@ -36,7 +37,7 @@ class CriticNetwork(nn.Module):
 
 
 class PPOAgent:
-    def __init__(self, state_dim, action_dim, buffer_size=10000, learning_rate_actor=0.0003, learning_rate_critic=0.001, gamma=0.99, clip_epsilon=0.2):
+    def __init__(self, state_dim, action_dim, buffer_size=10000, learning_rate_actor=0.0003, learning_rate_critic=0.001, gamma=0.99, clip_epsilon=0.3):
         # Init
         self.actor_log_std = torch.tensor(0.0)  # Make sure to convert it to a tensor
         
@@ -136,13 +137,20 @@ class PPOAgent:
             state, _ = env.reset()
             episode_reward = 0
             done = False  # Initialize done flag
+            truncated = False
+            max_timesteps = 1000  # Max number of timesteps per episode
+            timesteps = 0  # Initialize timesteps counter
 
-            while not done:  # Run until natural termination
+            while not done and not truncated:  # Run until natural termination
                 action = self.actor(torch.FloatTensor(state)).detach().numpy()
-                next_state, reward, done, _, _ = env.step(action)
+                next_state, reward, done, truncated, info = env.step(action)
                 self.store_experience(state, action, reward, next_state, done)
                 state = next_state
                 episode_reward += reward
+                #timesteps += 1
+                #if timesteps >= max_timesteps:
+                #    done = True
+                #pygame.time.delay(30)
 
             # After collecting enough experiences, update the policy
             for _ in range(epochs):

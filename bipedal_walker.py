@@ -11,33 +11,37 @@ import pygame
 class ActorNetwork(nn.Module):
     def __init__(self, state_dim, action_dim):
         super(ActorNetwork, self).__init__()
-        self.fc1 = nn.Linear(state_dim, 128)  # Increased size
-        self.fc2 = nn.Linear(128, 64)
-        self.fc3 = nn.Linear(64, action_dim)
+        self.fc1 = nn.Linear(state_dim, 256)  
+        self.fc2 = nn.Linear(256, 128)
+        self.fc3 = nn.Linear(128, 64)
+        self.fc4 = nn.Linear(64, action_dim)
 
     def forward(self, state):
         x = F.relu(self.fc1(state))
         x = F.relu(self.fc2(x))
         x = torch.tanh(self.fc3(x))
+        x = torch.tanh(self.fc4(x))
         return x
 
 # Critic Network
 class CriticNetwork(nn.Module):
     def __init__(self, state_dim):
         super(CriticNetwork, self).__init__()
-        self.fc1 = nn.Linear(state_dim, 128)  # Increased size
-        self.fc2 = nn.Linear(128, 64)
-        self.fc3 = nn.Linear(64, 1)
+        self.fc1 = nn.Linear(state_dim, 256)  
+        self.fc2 = nn.Linear(256, 128)
+        self.fc3 = nn.Linear(128, 64)
+        self.fc4 = nn.Linear(64, 1)
 
     def forward(self, state):
         x = F.relu(self.fc1(state))
         x = F.relu(self.fc2(x))
-        x = self.fc3(x)
+        x = F.relu(self.fc3(x))
+        x = self.fc4(x)
         return x
 
 
 class PPOAgent:
-    def __init__(self, state_dim, action_dim, buffer_size=10000, learning_rate_actor=0.0003, learning_rate_critic=0.001, gamma=0.99, clip_epsilon=0.3):
+    def __init__(self, state_dim, action_dim, buffer_size=10000, learning_rate_actor=0.0003, learning_rate_critic=0.001, gamma=0.99, clip_epsilon=0.2):
         # Init
         self.actor_log_std = torch.tensor(0.0)  # Make sure to convert it to a tensor
         
@@ -140,14 +144,20 @@ class PPOAgent:
             truncated = False
             max_timesteps = 1000  # Max number of timesteps per episode
             timesteps = 0  # Initialize timesteps counter
+            old_action = [0, 0, 0, 0]
 
             while not done and not truncated:  # Run until natural termination
                 action = self.actor(torch.FloatTensor(state)).detach().numpy()
                 next_state, reward, done, truncated, info = env.step(action)
+                #print('action: ', action)
                 self.store_experience(state, action, reward, next_state, done)
+                print('timestep: ', timesteps,' [0]: ', action[0]-old_action[0], ' [1]: ', action[1]-old_action[1], ' [2]: ', action[2]-old_action[2], ' [3]: ', action[3]-old_action[3])
+                old_action = action
                 state = next_state
                 episode_reward += reward
-                #timesteps += 1
+                #if not done or not truncated:
+                #    print(' done: ', done, ' truncated: ', truncated, ' timesteps: ', timesteps)
+                timesteps += 1
                 #if timesteps >= max_timesteps:
                 #    done = True
                 #pygame.time.delay(30)

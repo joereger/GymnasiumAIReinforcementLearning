@@ -1,11 +1,13 @@
 import gymnasium as gym
 import torch
 import torch.nn as nn
+import torch.nn.init as init
 import torch.nn.functional as F
 import torch.optim as optim
 from collections import deque
 from torch.distributions import Normal
 import pygame
+import os
 
 # Actor Network
 class ActorNetwork(nn.Module):
@@ -15,6 +17,15 @@ class ActorNetwork(nn.Module):
         self.fc2 = nn.Linear(256, 128)
         self.fc3 = nn.Linear(128, 64)
         self.fc4 = nn.Linear(64, action_dim)
+
+        init.normal_(self.fc1.weight, mean=0., std=1)
+        init.normal_(self.fc1.bias, mean=0., std=1)
+        init.normal_(self.fc2.weight, mean=0., std=1)
+        init.normal_(self.fc2.bias, mean=0., std=1)
+        init.normal_(self.fc3.weight, mean=0., std=1)
+        init.normal_(self.fc3.bias, mean=0., std=1)
+        init.normal_(self.fc4.weight, mean=0., std=1)
+        init.normal_(self.fc4.bias, mean=0., std=1)
 
     def forward(self, state):
         x = F.relu(self.fc1(state))
@@ -32,6 +43,15 @@ class CriticNetwork(nn.Module):
         self.fc3 = nn.Linear(128, 64)
         self.fc4 = nn.Linear(64, 1)
 
+        init.normal_(self.fc1.weight, mean=0., std=1)
+        init.normal_(self.fc1.bias, mean=0., std=1)
+        init.normal_(self.fc2.weight, mean=0., std=1)
+        init.normal_(self.fc2.bias, mean=0., std=1)
+        init.normal_(self.fc3.weight, mean=0., std=1)
+        init.normal_(self.fc3.bias, mean=0., std=1)
+        init.normal_(self.fc4.weight, mean=0., std=1)
+        init.normal_(self.fc4.bias, mean=0., std=1)
+
     def forward(self, state):
         x = F.relu(self.fc1(state))
         x = F.relu(self.fc2(x))
@@ -41,7 +61,8 @@ class CriticNetwork(nn.Module):
 
 
 class PPOAgent:
-    def __init__(self, state_dim, action_dim, buffer_size=10000, learning_rate_actor=0.0003, learning_rate_critic=0.001, gamma=0.99, clip_epsilon=0.2):
+    #def __init__(self, state_dim, action_dim, buffer_size=100000, learning_rate_actor=0.0003, learning_rate_critic=0.001, gamma=0.99, clip_epsilon=0.2):
+    def __init__(self, state_dim, action_dim, buffer_size=100000, learning_rate_actor=0.0003, learning_rate_critic=0.001, gamma=0.99, clip_epsilon=0.2):
         # Init
         self.actor_log_std = torch.tensor(0.0)  # Make sure to convert it to a tensor
         
@@ -61,6 +82,7 @@ class PPOAgent:
         self.memory = []
 
         # Initialize memory buffer with a fixed size
+        self.buffer_size = buffer_size
         self.memory = deque(maxlen=buffer_size)
 
     def store_experience(self, state, action, reward, next_state, done):
@@ -134,11 +156,15 @@ class PPOAgent:
         actor_loss.backward()
         self.actor_optimizer.step()
 
-    def train(self, env, num_episodes=1000, epochs=1): # epochs=10
+        #print(f"Critic Loss: {critic_loss.item():.4f}, Actor Loss: {actor_loss.item():.4f}, Mean Action: {mean.mean().item():.4f}")
+
+
+    def train(self, env, num_episodes=1000, epochs=1):
         episode_rewards = []  # To store cumulative rewards for each episode
 
         for episode in range(num_episodes):
             state, _ = env.reset()
+            self.memory = deque(maxlen=self.buffer_size) # Clear the memory buffer each episode
             episode_reward = 0
             done = False  
             truncated = False
@@ -146,11 +172,14 @@ class PPOAgent:
 
             while not done and not truncated:  # Run until natural termination
                 action = self.actor(torch.FloatTensor(state)).detach().numpy()
+                #print('timesteps: ', timesteps, 'state: ', state, ' torch.FloatTensor(state): ', torch.FloatTensor(state))
                 next_state, reward, done, truncated, info = env.step(action)
                 self.store_experience(state, action, reward, next_state, done)
                 state = next_state
                 episode_reward += reward
                 timesteps += 1
+                print(f"ep: {episode}  t: {timesteps}  reward: {reward:.4f}  ep_reward: {episode_reward:.4f}  action: {action}")
+
 
             # After collecting enough experiences, update the policy
             for _ in range(epochs):
@@ -163,7 +192,30 @@ class PPOAgent:
             print(f"Episode {episode+1}/{num_episodes} - Reward: {episode_reward}")
 
         return episode_rewards
+    
+    def save(self, actor_path='actor.pth', critic_path='critic.pth'):
+        try:
+            actor_dir = os.path.dirname(actor_path)
+            if actor_dir and not os.path.exists(actor_dir):
+                os.makedirs(actor_dir)
+            critic_dir = os.path.dirname(critic_path)
+            if critic_dir and not os.path.exists(critic_dir):
+                os.makedirs(critic_dir)
+            torch.save(self.actor.state_dict(), actor_path)
+            torch.save(self.critic.state_dict(), critic_path)
+            print(f"Models saved to {actor_path} and {critic_path}")
+        except Exception as e:
+            print(f"Could not save models. Error: {e}")
 
+    def load(self, actor_path='actor.pth', critic_path='critic.pth'):
+        try:
+            if not os.path.exists(actor_path) or not os.path.exists(critic_path):
+                raise FileNotFoundError("Model files not found.")
+            self.actor.load_state_dict(torch.load(actor_path))
+            self.critic.load_state_dict(torch.load(critic_path))
+            print(f"Models loaded from {actor_path} and {critic_path}")
+        except Exception as e:
+            print(f"Could not load models. Error: {e}")
 
 def evaluate(agent, env, num_episodes=10):
     episode_rewards = []
@@ -182,13 +234,12 @@ def evaluate(agent, env, num_episodes=10):
     avg_reward = sum(episode_rewards) / num_episodes
     print(f"Average Reward over {num_episodes} episodes: {avg_reward}")
 
-
-
-
-
 # Set up the environment
 env = gym.make("BipedalWalker-v3", render_mode="human")
 #env = gym.make("BipedalWalker-v3")
+
+PATH = 'data/'
+PREFIX = 'bipedal_walker'
 
 # Initialize the PPOAgent
 state_dim = env.observation_space.shape[0]
@@ -197,6 +248,9 @@ agent = PPOAgent(state_dim, action_dim)
 
 # Train the agent
 agent.train(env)
+
+# Save the agents
+agent.save(PATH + PREFIX + '_actor.pth', PATH + PREFIX + '_critic.pth')
 
 # Evaluate the training
 evaluate(agent, env)

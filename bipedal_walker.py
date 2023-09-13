@@ -134,33 +134,23 @@ class PPOAgent:
         actor_loss.backward()
         self.actor_optimizer.step()
 
-    def train(self, env, num_episodes=1000, epochs=10):
+    def train(self, env, num_episodes=1000, epochs=1): # epochs=10
         episode_rewards = []  # To store cumulative rewards for each episode
 
         for episode in range(num_episodes):
             state, _ = env.reset()
             episode_reward = 0
-            done = False  # Initialize done flag
+            done = False  
             truncated = False
-            max_timesteps = 1000  # Max number of timesteps per episode
-            timesteps = 0  # Initialize timesteps counter
-            old_action = [0, 0, 0, 0]
+            timesteps = 0  
 
             while not done and not truncated:  # Run until natural termination
                 action = self.actor(torch.FloatTensor(state)).detach().numpy()
                 next_state, reward, done, truncated, info = env.step(action)
-                #print('action: ', action)
                 self.store_experience(state, action, reward, next_state, done)
-                print('timestep: ', timesteps,' [0]: ', action[0]-old_action[0], ' [1]: ', action[1]-old_action[1], ' [2]: ', action[2]-old_action[2], ' [3]: ', action[3]-old_action[3])
-                old_action = action
                 state = next_state
                 episode_reward += reward
-                #if not done or not truncated:
-                #    print(' done: ', done, ' truncated: ', truncated, ' timesteps: ', timesteps)
                 timesteps += 1
-                #if timesteps >= max_timesteps:
-                #    done = True
-                #pygame.time.delay(30)
 
             # After collecting enough experiences, update the policy
             for _ in range(epochs):

@@ -8,6 +8,7 @@ from collections import deque
 from torch.distributions import Normal
 import pygame
 import os
+import numpy as np
 
 # Actor Network
 class ActorNetwork(nn.Module):
@@ -158,7 +159,7 @@ class PPOAgent:
         #print(f"Critic Loss: {critic_loss.item():.4f}, Actor Loss: {actor_loss.item():.4f}, Mean Action: {mean.mean().item():.4f}")
 
 
-    def train(self, env, num_episodes=100000, epochs=10):
+    def train(self, env, num_episodes=500, epochs=10):
         episode_rewards = []  # To store cumulative rewards for each episode
 
         for episode in range(num_episodes):
@@ -236,27 +237,143 @@ def evaluate(agent, env, num_episodes=10):
     avg_reward = sum(episode_rewards) / num_episodes
     print(f"Average Reward over {num_episodes} episodes: {avg_reward}")
 
+# Genetic Algorithm Functions
+def evaluate_population(population, env, agent, num_episodes=10):
+    print('EVALUATE POPULATION')
+    fitness_scores = []
+    individual_count = 0
+    for individual in population:
+        total_reward = 0
+        individual_count += 1
+        for _ in range(num_episodes):
+            state, _ = env.reset()
+            terminated = False
+            truncated = False
+            while not terminated and not truncated:
+                action = agent.actor(torch.FloatTensor(state)).detach().numpy()
+                next_state, reward, terminated, truncated, _ = env.step(action)
+                total_reward += reward
+                state = next_state
+        print('Individual', individual_count,' avg reward: ', total_reward / num_episodes)
+        fitness_scores.append(total_reward / num_episodes)
+    return np.array(fitness_scores)
+
+def select_parents(population, fitness_scores, num_parents):
+    print('SELECT PARENTS')
+    parents = []
+    for _ in range(num_parents):
+        selected_parent = np.argmax(fitness_scores)
+        parents.append(population[selected_parent])
+        fitness_scores[selected_parent] = -1e9  # set to a low value to avoid reselection
+    return parents
+
+def crossover_and_mutate(parents, num_offspring, mutation_rate=0.5):
+    print('CROSSOVER AND MUTATE')
+    offspring = []
+    while len(offspring) < num_offspring:
+        parent1, parent2 = np.random.choice(parents, 2, replace=False)
+        child_state_dict = {}
+        for key in parent1.keys():
+            if np.random.rand() < 0.5:
+                child_state_dict[key] = parent1[key]
+            else:
+                child_state_dict[key] = parent2[key]
+            
+            # Apply mutation
+            if np.random.rand() < mutation_rate:
+                mutation = torch.randn_like(child_state_dict[key]) * 0.5
+                child_state_dict[key] += mutation
+        offspring.append(child_state_dict)
+    return offspring
+
+# Initialize GA parameters
+population_size = 500
+num_generations = 20
+num_parents = 50
+num_offspring = population_size - num_parents
+
 # Set up the environment
-env = gym.make("BipedalWalker-v3", render_mode="human")
-#env = gym.make("BipedalWalker-v3")
+#env = gym.make("BipedalWalker-v3", render_mode="human")
+env = gym.make("BipedalWalker-v3")
 
 PATH = 'data/'
-PREFIX = 'bipedal_walker_v02'
+PREFIX = 'bipedal_walker_GA_V03'
 
 # Initialize the PPOAgent
 state_dim = env.observation_space.shape[0]
 action_dim = env.action_space.shape[0]
 agent = PPOAgent(state_dim, action_dim)
 
-# Load the agents
-agent.load(PATH + PREFIX + '_actor.pth', PATH + PREFIX + '_critic.pth')
+# Initialize population with random policies
+population = [torch.load('data/bipedal_walker_BASELINE_actor.pth') for _ in range(population_size)]
 
-# Train the agent
+# Apply mutation to each individual in the initial population
+mutation_rate = 0.99  # Set your desired mutation rate
+for individual in population:
+    for key in individual.keys():
+        if np.random.rand() < mutation_rate:
+            mutation = torch.randn_like(individual[key]) * 0.99
+            individual[key] += mutation
+
+# GA loop
+for generation in range(num_generations):
+    # Evaluate the fitness of each individual in the population
+    fitness_scores = evaluate_population(population, env, agent)
+    
+    # Select the best parents based on fitness
+    parents = select_parents(population, fitness_scores, num_parents)
+    
+    # Generate offspring through crossover and mutation
+    offspring = crossover_and_mutate(parents, num_offspring)
+    
+    # Create new population with parents and offspring
+    population = parents + offspring
+    
+    # Log the best fitness score in the generation
+    print(f"Generation {generation+1}, Best Fitness: {max(fitness_scores)}")
+
+# Train PPO with the best initial policy
+best_initial_policy = population[np.argmax(fitness_scores)]
+agent.actor.load_state_dict(best_initial_policy)
 agent.train(env)
 
-# Save the agents
-agent.save(PATH + PREFIX + '_actor.pth', PATH + PREFIX + '_critic.pth')
+# # Loop through each individual in the population and visualize them
+# for i, individual in enumerate(population):
+#     # Initialize total_reward to 0 for each individual
+#     total_reward = 0
 
-# Evaluate the training
-#evaluate(agent, env)
+#     # Load the individual's neural network weights into the agent
+#     agent.actor.load_state_dict(individual)
+
+#     # Apply mutation
+#     mutation_rate = 0.2
+#     for key in individual.keys():
+#         if np.random.rand() < mutation_rate:
+#             mutation = torch.randn_like(individual[key]) * 0.5
+#             individual[key] += mutation
+#     agent.actor.load_state_dict(individual)  # Reload the mutated individual
+
+#     # Run the individual for a few episodes to see its behavior
+#     num_episodes = 1
+#     for episode in range(num_episodes):
+#         state, _ = env.reset()
+#         terminated = False
+#         truncated = False
+#         while not terminated and not truncated:
+#             action = agent.actor(torch.FloatTensor(state)).detach().numpy()
+#             next_state, reward, terminated, truncated, _ = env.step(action)
+#             total_reward += reward
+#             state = next_state
+    
+#     print(f"Individual {i+1}, Avg Reward: {total_reward/num_episodes:.4f}")
+
+
+# #Load the agents (NON-Genetic Algorithm) 
+# agent.load(PATH + PREFIX + '_actor.pth', PATH + PREFIX + '_critic.pth')
+# #Train the agent
+# agent.train(env, 1, 1)
+# #Save the agents
+# agent.save(PATH + PREFIX + '_actor.pth', PATH + PREFIX + '_critic.pth')
+# #Evaluate the training
+# #evaluate(agent, env)
 

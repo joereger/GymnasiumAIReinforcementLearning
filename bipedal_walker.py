@@ -13,10 +13,10 @@ import os
 class ActorNetwork(nn.Module):
     def __init__(self, state_dim, action_dim):
         super(ActorNetwork, self).__init__()
-        self.fc1 = nn.Linear(state_dim, 256)  
-        self.fc2 = nn.Linear(256, 128)
-        self.fc3 = nn.Linear(128, 64)
-        self.fc4 = nn.Linear(64, action_dim)
+        self.fc1 = nn.Linear(state_dim, 512)  
+        self.fc2 = nn.Linear(512, 256)
+        self.fc3 = nn.Linear(256, 128)
+        self.fc4 = nn.Linear(128, action_dim)
 
         init.normal_(self.fc1.weight, mean=0., std=1)
         init.normal_(self.fc1.bias, mean=0., std=1)
@@ -38,10 +38,10 @@ class ActorNetwork(nn.Module):
 class CriticNetwork(nn.Module):
     def __init__(self, state_dim):
         super(CriticNetwork, self).__init__()
-        self.fc1 = nn.Linear(state_dim, 256)  
-        self.fc2 = nn.Linear(256, 128)
-        self.fc3 = nn.Linear(128, 64)
-        self.fc4 = nn.Linear(64, 1)
+        self.fc1 = nn.Linear(state_dim, 512)  
+        self.fc2 = nn.Linear(512, 256)
+        self.fc3 = nn.Linear(256, 128)
+        self.fc4 = nn.Linear(128, 1)
 
         init.normal_(self.fc1.weight, mean=0., std=1)
         init.normal_(self.fc1.bias, mean=0., std=1)
@@ -62,7 +62,7 @@ class CriticNetwork(nn.Module):
 
 class PPOAgent:
     #def __init__(self, state_dim, action_dim, buffer_size=100000, learning_rate_actor=0.0003, learning_rate_critic=0.001, gamma=0.99, clip_epsilon=0.2):
-    def __init__(self, state_dim, action_dim, buffer_size=100000, learning_rate_actor=0.0003, learning_rate_critic=0.001, gamma=0.99, clip_epsilon=0.2):
+    def __init__(self, state_dim, action_dim, buffer_size=10000, learning_rate_actor=0.001, learning_rate_critic=0.01, gamma=0.99, clip_epsilon=0.15):
         # Init
         self.actor_log_std = torch.tensor(0.0)  # Make sure to convert it to a tensor
         
@@ -159,7 +159,7 @@ class PPOAgent:
         #print(f"Critic Loss: {critic_loss.item():.4f}, Actor Loss: {actor_loss.item():.4f}, Mean Action: {mean.mean().item():.4f}")
 
 
-    def train(self, env, num_episodes=1000, epochs=1):
+    def train(self, env, num_episodes=10000, epochs=10):
         episode_rewards = []  # To store cumulative rewards for each episode
 
         for episode in range(num_episodes):
@@ -178,8 +178,11 @@ class PPOAgent:
                 state = next_state
                 episode_reward += reward
                 timesteps += 1
-                print(f"ep: {episode}  t: {timesteps}  reward: {reward:.4f}  ep_reward: {episode_reward:.4f}  action: {action}")
-
+                #print(f"ep: {episode}  t: {timesteps}  reward: {reward:.4f}  ep_reward: {episode_reward:.4f}  action: {action}")
+                #if pygame.display.get_init():
+                #    akeys = pygame.key.get_pressed()
+                #    if keys[pygame.K_q]:
+                #        print(f"Q PRESSED!!!!")
 
             # After collecting enough experiences, update the policy
             for _ in range(epochs):
@@ -235,16 +238,19 @@ def evaluate(agent, env, num_episodes=10):
     print(f"Average Reward over {num_episodes} episodes: {avg_reward}")
 
 # Set up the environment
-env = gym.make("BipedalWalker-v3", render_mode="human")
-#env = gym.make("BipedalWalker-v3")
+#env = gym.make("BipedalWalker-v3", render_mode="human")
+env = gym.make("BipedalWalker-v3")
 
 PATH = 'data/'
-PREFIX = 'bipedal_walker'
+PREFIX = 'bipedal_walker_v02'
 
 # Initialize the PPOAgent
 state_dim = env.observation_space.shape[0]
 action_dim = env.action_space.shape[0]
 agent = PPOAgent(state_dim, action_dim)
+
+# Load the agents
+agent.load(PATH + PREFIX + '_actor.pth', PATH + PREFIX + '_critic.pth')
 
 # Train the agent
 agent.train(env)
@@ -253,5 +259,5 @@ agent.train(env)
 agent.save(PATH + PREFIX + '_actor.pth', PATH + PREFIX + '_critic.pth')
 
 # Evaluate the training
-evaluate(agent, env)
+#evaluate(agent, env)
 

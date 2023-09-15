@@ -4,8 +4,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 def plot_activations(activations):
-    print("Plotting starts")
     plt.clf()  # Clear the previous plot
+    plt.axis([0, 200, 0, 200])  # Set axis limits [xmin, xmax, ymin, ymax]
+    plt.xlabel('Layers')
+    plt.ylabel('Neurons')
     prev_x = 0
     for layer_name, activation in activations.items():
         norm_activation = np.clip(activation.detach().numpy(), 0, 1)
@@ -18,8 +20,6 @@ def plot_activations(activations):
     
     plt.draw()
     plt.pause(0.001)
-    plt.show()  # Explicitly show the plot
-    print("Plotting ends")
 
 def plot_layer(x, activations, prev_x=None, prev_activations=None):
     for i, activation in enumerate(activations):

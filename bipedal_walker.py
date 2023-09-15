@@ -8,6 +8,7 @@ from collections import deque
 from torch.distributions import Normal
 import pygame
 import os
+from visualization_utils import * # mah little helper utils for visualizing activations
 
 # Actor Network
 class ActorNetwork(nn.Module):
@@ -70,8 +71,10 @@ class PPOAgent:
         self.critic = CriticNetwork(state_dim)
         
         # Initialize optimizers
-        self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=learning_rate_actor)
-        self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=learning_rate_critic)
+        #self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=learning_rate_actor)
+        #self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=learning_rate_critic)
+        self.actor_optimizer = optim.RMSprop(self.actor.parameters(), lr=learning_rate_actor)
+        self.critic_optimizer = optim.RMSprop(self.critic.parameters(), lr=learning_rate_critic)
         
         # Initialize hyperparameters
         self.gamma = gamma
@@ -158,7 +161,7 @@ class PPOAgent:
         #print(f"Critic Loss: {critic_loss.item():.4f}, Actor Loss: {actor_loss.item():.4f}, Mean Action: {mean.mean().item():.4f}")
 
 
-    def train(self, env, num_episodes=100000, epochs=10):
+    def train(self, env, num_episodes=1000, epochs=10):
         episode_rewards = []  # To store cumulative rewards for each episode
 
         for episode in range(num_episodes):
@@ -178,10 +181,6 @@ class PPOAgent:
                 episode_reward += reward
                 timesteps += 1
                 #print(f"ep: {episode}  t: {timesteps}  reward: {reward:.4f}  ep_reward: {episode_reward:.4f}  action: {action}")
-                #if pygame.display.get_init():
-                #    akeys = pygame.key.get_pressed()
-                #    if keys[pygame.K_q]:
-                #        print(f"Q PRESSED!!!!")
 
             # After collecting enough experiences, update the policy
             for _ in range(epochs):
@@ -192,6 +191,9 @@ class PPOAgent:
 
             episode_rewards.append(episode_reward)
             print(f"Episode {episode+1}/{num_episodes} - Reward: {episode_reward}")
+
+            # Visualize the activations
+            plot_activations(activations)
 
         return episode_rewards
     
@@ -237,22 +239,31 @@ def evaluate(agent, env, num_episodes=10):
     print(f"Average Reward over {num_episodes} episodes: {avg_reward}")
 
 # Set up the environment
-env = gym.make("BipedalWalker-v3", render_mode="human")
-#env = gym.make("BipedalWalker-v3")
+#env = gym.make("BipedalWalker-v3", render_mode="human")
+env = gym.make("BipedalWalker-v3")
 
+# Constants
+num_episodes = 1000
 PATH = 'data/'
-PREFIX = 'bipedal_walker_v02'
+PREFIX = 'bipedal_walker_v04'
 
 # Initialize the PPOAgent
 state_dim = env.observation_space.shape[0]
 action_dim = env.action_space.shape[0]
 agent = PPOAgent(state_dim, action_dim)
 
+# Visualization
+plt.ion()
+plt.axis('off')
+plt.show()
+activations = {}
+register_hooks(agent.actor, activations)
+
 # Load the agents
 agent.load(PATH + PREFIX + '_actor.pth', PATH + PREFIX + '_critic.pth')
 
 # Train the agent
-agent.train(env)
+agent.train(env, num_episodes)
 
 # Save the agents
 agent.save(PATH + PREFIX + '_actor.pth', PATH + PREFIX + '_critic.pth')

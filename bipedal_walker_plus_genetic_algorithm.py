@@ -160,6 +160,7 @@ class PPOAgent:
 
 
     def train(self, env, num_episodes=500, epochs=10):
+        print('TRAINING')
         episode_rewards = []  # To store cumulative rewards for each episode
 
         for episode in range(num_episodes):
@@ -192,7 +193,7 @@ class PPOAgent:
                 self.update_policy(list(states), list(actions), advantages, value_targets)
 
             episode_rewards.append(episode_reward)
-            print(f"Episode {episode+1}/{num_episodes} - Reward: {episode_reward}")
+            #print(f"Training Episode {episode+1}/{num_episodes} - Reward: {episode_reward}")
 
         return episode_rewards
     
@@ -233,7 +234,7 @@ def evaluate(agent, env, num_episodes=10):
             if terminated or truncated:
                 break
         episode_rewards.append(episode_reward)
-        print(f"Evaluation Episode {i_episode+1}: Reward = {episode_reward}")
+        #print(f"Evaluation Episode {i_episode+1}: Reward = {episode_reward}")
     avg_reward = sum(episode_rewards) / num_episodes
     print(f"Average Reward over {num_episodes} episodes: {avg_reward}")
 
@@ -254,7 +255,7 @@ def evaluate_population(population, env, agent, num_episodes=10):
                 next_state, reward, terminated, truncated, _ = env.step(action)
                 total_reward += reward
                 state = next_state
-        print('Individual', individual_count,' avg reward: ', total_reward / num_episodes)
+        #print('Individual', individual_count,' avg reward: ', total_reward / num_episodes)
         fitness_scores.append(total_reward / num_episodes)
     return np.array(fitness_scores)
 
@@ -304,12 +305,13 @@ PATH = 'data/'
 PREFIX = 'bipedal_walker_GA_V03'
 
 # Initialize GA parameters
-population_size = 5000
-num_parents = 100
+num_cycles = 20
+population_size = 100
+num_parents = 5
 num_offspring = population_size - num_parents
-num_generations = 50
+num_generations = 5
 initial_mutation_rate = 0.99
-ppo_episodes = 100
+ppo_episodes = 400
 
 # Initialize the PPOAgent
 state_dim = env.observation_space.shape[0]
@@ -321,7 +323,7 @@ fitness_scores = np.zeros(population_size)  # Assuming population_size is define
 population = [torch.load('data/bipedal_walker_BASELINE_actor.pth') for _ in range(population_size)]
 
 # Main loop for the hybrid approach
-for cycle in range(5):  # Number of cycles
+for cycle in range(num_cycles):  # Number of cycles
     print(f"CYCLE {cycle+1} beginning")
 
     # 2. Train PPO for 500 episodes

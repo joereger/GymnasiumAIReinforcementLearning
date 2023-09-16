@@ -41,7 +41,7 @@ class A3CNetwork(nn.Module):
 
 
 class A3CAgent:
-    def __init__(self, state_dim, action_dim, learning_rate=0.0001):
+    def __init__(self, state_dim, action_dim, learning_rate=0.001):
         self.a3c_network = A3CNetwork(state_dim, action_dim)
         self.optimizer = optim.Adam(self.a3c_network.parameters(), lr=learning_rate)
 
@@ -94,30 +94,24 @@ class A3CAgent:
             
             print(f"Episode {episode+1}/{num_episodes}, Total Reward: {episode_reward}")
 
-
-    def save(self, actor_path='actor.pth', critic_path='critic.pth'):
+    def load(self, model_path='_neural_network.pth'):
         try:
-            actor_dir = os.path.dirname(actor_path)
-            if actor_dir and not os.path.exists(actor_dir):
-                os.makedirs(actor_dir)
-            critic_dir = os.path.dirname(critic_path)
-            if critic_dir and not os.path.exists(critic_dir):
-                os.makedirs(critic_dir)
-            torch.save(self.actor.state_dict(), actor_path)
-            torch.save(self.critic.state_dict(), critic_path)
-            print(f"Models saved to {actor_path} and {critic_path}")
-        except Exception as e:
-            print(f"Could not save models. Error: {e}")
-
-    def load(self, actor_path='actor.pth', critic_path='critic.pth'):
-        try:
-            if not os.path.exists(actor_path) or not os.path.exists(critic_path):
-                raise FileNotFoundError("Model files not found.")
-            self.actor.load_state_dict(torch.load(actor_path))
-            self.critic.load_state_dict(torch.load(critic_path))
-            print(f"Models loaded from {actor_path} and {critic_path}")
+            if not os.path.exists(model_path):
+                raise FileNotFoundError("Model file not found.")
+            self.a3c_network.load_state_dict(torch.load(model_path))
+            print(f"Modes loaded from {model_path}")
         except Exception as e:
             print(f"Could not load models. Error: {e}")
+            
+    def save(self, model_path='_neural_network.pth'):
+        try:
+            model_dir = os.path.dirname(model_path)
+            if model_dir and not os.path.exists(model_dir):
+                os.makedirs(model_dir)
+            torch.save(self.a3c_network.state_dict(), model_path)
+            print(f"Model saved to {model_path}")
+        except Exception as e:
+            print(f"Could not save models. Error: {e}")
 
 
 # Set up the environment

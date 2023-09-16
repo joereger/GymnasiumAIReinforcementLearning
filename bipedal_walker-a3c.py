@@ -6,6 +6,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 import pygame
 import os
+import numpy as np
 
 class A3CNetwork(nn.Module):
     def __init__(self, state_dim, action_dim):
@@ -40,21 +41,43 @@ class A3CAgent:
         self.a3c_network = A3CNetwork(state_dim, action_dim)
         self.optimizer = optim.Adam(self.a3c_network.parameters(), lr=learning_rate)
 
-    def train(self, env, num_episodes=1000):
+    def train(self, env, num_episodes=1000, gamma=0.99):
         for episode in range(num_episodes):
             state, _ = env.reset()
             done = False
+            episode_reward = 0
+            
             while not done:
-                action, value = self.a3c_network(torch.FloatTensor(state))
-                action = action.detach().numpy()
+                # Forward pass to get the action probabilities and state value
+                action_prob, state_value = self.a3c_network(torch.FloatTensor(state))
+                action_prob = action_prob.detach().numpy()
                 
+                # Sample action from the action probabilities
+                action = np.random.choice(len(action_prob), p=action_prob)
+                
+                # Take the action in the environment
                 next_state, reward, done, _ = env.step(action)
                 
-                # Compute advantage and total loss here
+                # Calculate the advantage
+                next_state_value = self.a3c_network(torch.FloatTensor(next_state))[1].detach().numpy()
+                advantage = reward + gamma * next_state_value * (1 - int(done)) - state_value.detach().numpy()
+                
+                # Calculate the loss
+                critic_loss = F.mse_loss(state_value, torch.tensor([reward + gamma * next_state_value * (1 - int(done))]))
+                actor_loss = -torch.log(action_prob[action]) * advantage
+                total_loss = actor_loss + critic_loss
                 
                 # Perform a gradient step
+                self.optimizer.zero_grad()
+                total_loss.backward()
+                self.optimizer.step()
                 
+                # Update the state and episode reward
                 state = next_state
+                episode_reward += reward
+            
+            print(f"Episode {episode+1}/{num_episodes}, Total Reward: {episode_reward}")
+
 
     def save(self, actor_path='actor.pth', critic_path='critic.pth'):
         try:
@@ -88,9 +111,9 @@ env = gym.make("BipedalWalker-v3", render_mode="human")
 # Constants
 num_episodes = 1000
 PATH = 'data/'
-PREFIX = 'bipedal_walker_ag3_v01'
+PREFIX = 'bipedal_walker_a3c_v01'
 
-# Initialize the PPOAgent
+# Initialize the A3C agent
 state_dim = env.observation_space.shape[0]
 action_dim = env.action_space.shape[0]
 agent = A3CAgent(state_dim, action_dim)

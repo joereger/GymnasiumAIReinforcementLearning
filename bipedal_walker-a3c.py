@@ -45,9 +45,10 @@ class A3CAgent:
         for episode in range(num_episodes):
             state, _ = env.reset()
             done = False
+            truncated = False
             episode_reward = 0
             
-            while not done:
+            while not done and not truncated:
                 # Forward pass to get the action probabilities and state value
                 action_prob, state_value = self.a3c_network(torch.FloatTensor(state))
                 action_prob = action_prob.detach().numpy()
@@ -56,7 +57,7 @@ class A3CAgent:
                 action = np.random.choice(len(action_prob), p=action_prob)
                 
                 # Take the action in the environment
-                next_state, reward, done, _ = env.step(action)
+                next_state, reward, done, truncated, _ = env.step(action)
                 
                 # Calculate the advantage
                 next_state_value = self.a3c_network(torch.FloatTensor(next_state))[1].detach().numpy()

@@ -113,7 +113,6 @@ class A3CAgent:
         except Exception as e:
             print(f"Could not save models. Error: {e}")
 
-
 # Set up the environment
 #env = gym.make("BipedalWalker-v3", render_mode="human")
 env = gym.make("BipedalWalker-v3")
@@ -126,16 +125,15 @@ PREFIX = 'bipedal_walker_a3c_v01'
 # Initialize the A3C agent
 state_dim = env.observation_space.shape[0]
 action_dim = env.action_space.shape[0]
-agent = A3CAgent(state_dim, action_dim)
+a3c_model = A3CAgent(state_dim, action_dim)
 
+# Load the model
+a3c_model.load(PATH + PREFIX + '_actor.pth', PATH + PREFIX + '_critic.pth')
 
-# Load the agents
-agent.load(PATH + PREFIX + '_actor.pth', PATH + PREFIX + '_critic.pth')
+# Train the model
+a3c_model.train(env, num_episodes)
 
-# Train the agent
-agent.train(env, num_episodes)
-
-# Save the agents
-agent.save(PATH + PREFIX + '_actor.pth', PATH + PREFIX + '_critic.pth')
+# Save the model
+a3c_model.save(PATH + PREFIX + '_actor.pth', PATH + PREFIX + '_critic.pth')
 
 

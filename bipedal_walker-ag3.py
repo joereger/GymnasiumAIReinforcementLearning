@@ -7,6 +7,25 @@ import torch.optim as optim
 import pygame
 import os
 
+class AG3Network(nn.Module):
+    def __init__(self, state_dim, action_dim):
+        super(AG3Network, self).__init__()
+        self.fc1 = nn.Linear(state_dim, 512)
+        self.fc2 = nn.Linear(512, 256)
+        self.fc3 = nn.Linear(256, action_dim)
+        
+        init.normal_(self.fc1.weight, mean=0., std=1)
+        init.normal_(self.fc1.bias, mean=0., std=1)
+        init.normal_(self.fc2.weight, mean=0., std=1)
+        init.normal_(self.fc2.bias, mean=0., std=1)
+        init.normal_(self.fc3.weight, mean=0., std=1)
+        init.normal_(self.fc3.bias, mean=0., std=1)
+
+    def forward(self, state):
+        x = F.relu(self.fc1(state))
+        x = F.relu(self.fc2(x))
+        x = torch.tanh(self.fc3(x))
+        return x
 
 
 

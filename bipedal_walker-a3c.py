@@ -7,6 +7,7 @@ import torch.optim as optim
 import pygame
 import os
 import numpy as np
+import matplotlib.pyplot as plt
 
 class A3CNetwork(nn.Module):
     def __init__(self, state_dim, action_dim):
@@ -41,11 +42,24 @@ class A3CNetwork(nn.Module):
 
 
 class A3CAgent:
-    def __init__(self, state_dim, action_dim, learning_rate=0.001):
+    def __init__(self, state_dim, action_dim, learning_rate=0.001, which_optimizer='adam'):
         self.a3c_network = A3CNetwork(state_dim, action_dim)
-        self.optimizer = optim.Adam(self.a3c_network.parameters(), lr=learning_rate)
+        if which_optimizer == 'adam':
+            self.optimizer = optim.Adam(self.a3c_network.parameters(), lr=learning_rate)
+        elif which_optimizer == 'sgd':
+            self.optimizer = optim.SGD(self.a3c_network.parameters(), lr=learning_rate)
+        elif which_optimizer == 'adagrad':
+            self.optimizer = optim.Adagrad(self.a3c_network.parameters(), lr=learning_rate)
+        elif which_optimizer == 'adadelta':
+            self.optimizer = optim.Adadelta(self.a3c_network.parameters(), lr=learning_rate)
+        elif which_optimizer == 'nadam':
+            self.optimizer = optim.NAdam(self.a3c_network.parameters(), lr=learning_rate)
+        else:
+            self.optimizer = optim.RMSprop(self.a3c_network.parameters(), lr=learning_rate)    
 
     def train(self, env, num_episodes=1000, gamma=0.99):
+        best_episode_reward = float('-inf')  # Initialize with negative infinity
+        
         for episode in range(num_episodes):
             state, _ = env.reset()
             done = False
@@ -85,14 +99,24 @@ class A3CAgent:
                 # Perform a gradient step
                 self.optimizer.zero_grad()
                 total_loss.backward()
+
+                # Clip the gradient norm to 1
+                torch.nn.utils.clip_grad_norm_(self.a3c_network.parameters(), max_norm=1)
+
                 self.optimizer.step()
 
-                
                 # Update the state and episode reward
                 state = next_state
                 episode_reward += reward
             
-            print(f"Episode {episode+1}/{num_episodes}, Total Reward: {episode_reward}")
+            # Update best_episode_reward if the current episode's reward is greater
+            if episode_reward > best_episode_reward:
+                best_episode_reward = episode_reward
+
+            print(f"Episode {episode+1}/{num_episodes}, Total Reward: {episode_reward}, Best Episode Reward: {best_episode_reward}")
+
+        return best_episode_reward
+
 
     def load(self, model_path='_neural_network.pth'):
         try:
@@ -120,7 +144,7 @@ env = gym.make("BipedalWalker-v3")
 # Constants
 num_episodes = 1000
 PATH = 'data/'
-PREFIX = 'bipedal_walker_a3c_v01'
+PREFIX = 'bipedal_walker_a3c_v02'
 
 # Initialize the A3C agent
 state_dim = env.observation_space.shape[0]
@@ -128,12 +152,64 @@ action_dim = env.action_space.shape[0]
 a3c_model = A3CAgent(state_dim, action_dim)
 
 # Load the model
-a3c_model.load(PATH + PREFIX + '_actor.pth', PATH + PREFIX + '_critic.pth')
-
+#a3c_model.load(PATH + PREFIX + '_actor.pth', PATH + PREFIX + '_critic.pth')
 # Train the model
-a3c_model.train(env, num_episodes)
-
+#a3c_model.train(env, num_episodes)
 # Save the model
-a3c_model.save(PATH + PREFIX + '_actor.pth', PATH + PREFIX + '_critic.pth')
+#a3c_model.save(PATH + PREFIX + '_actor.pth', PATH + PREFIX + '_critic.pth')
+
+class GridSearchResult:
+    def __init__(self, learning_rate, gamma, which_optimizer, best_episode_reward):
+        self.learning_rate = learning_rate
+        self.which_optimizer = which_optimizer
+        self.gamma = gamma
+        self.best_episode_reward = best_episode_reward
+
+# Initialize a list to store the results
+grid_search_results = []
+
+# Define the hyperparameters to test
+learning_rate_values = [0.00001, 0.0001, 0.001, 0.01, 0.1, 0.2, 0.3, 0.4] # [0.00001, 0.0001, 0.001, 0.01, 0.1, 0.2, 0.3, 0.4]
+gamma_values = [0.8, 0.9, 0.95, 0.99, 0.999] # [0.8, 0.9, 0.95, 0.99, 0.999]
+which_optimizer_values = ['adam', 'rmsprop', 'sgd', 'adagrad', 'adadelta', 'nadam'] # ['adam', 'rmsprop', 'sgd', 'adagrad', 'adadelta', 'nadam']
+
+# Perform the grid search
+for learning_rate in learning_rate_values:
+    for gamma in gamma_values:
+        for which_optimizer in which_optimizer_values:
+            print(f"Testing learning_rate={learning_rate}, gamma={gamma}...")
+            
+            # Initialize your A3C agent here with the current hyperparameters
+            agent = A3CAgent(state_dim, action_dim, learning_rate, which_optimizer)
+            
+            # Train the agent and get the best episode reward
+            best_episode_reward = agent.train(env, num_episodes=500, gamma=gamma)
+            
+            # Store the result
+            result = GridSearchResult(learning_rate, gamma, which_optimizer, best_episode_reward)
+            grid_search_results.append(result)
+            
+            print(f"Best episode reward with learning_rate={learning_rate}, gamma={gamma}, which_optimizer={which_optimizer}: {best_episode_reward}")
+
+# Create sexy plots (matplotlib for this)
+plt.figure(figsize=(10, 6))
+marker_dict = {'adam': 'o', 'sgd': 's', 'adagrad': '^', 'adadelta': 'D', 'nadam': 'x', 'ftrl': 'p', 'rmsprop': '+'}
+line_dict = {}
+
+for result in grid_search_results:
+    print(f"Learning Rate: {result.learning_rate}, Gamma: {result.gamma}, Optimizer: {result.which_optimizer}, Best Episode Reward: {result.best_episode_reward}")
+    
+    marker = marker_dict.get(result.which_optimizer, 'o')
+    line, = plt.plot(result.learning_rate, result.best_episode_reward, marker=marker, label=result.which_optimizer if result.which_optimizer not in line_dict else "")
+    
+    if result.which_optimizer not in line_dict:
+        line_dict[result.which_optimizer] = line
+
+plt.xlabel('Learning Rate')
+plt.ylabel('Best Episode Reward')
+plt.title('Grid Search Results')
+plt.legend()
+plt.show()
+
 
 

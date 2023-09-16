@@ -21,7 +21,11 @@ class A3CNetwork(nn.Module):
         # Critic layers
         self.critic = nn.Linear(256, 1)
 
-        # Initialization code remains the same
+        # Initialization with random weights and biases drawn from a normal distribution
+        init.normal_(self.fc1.weight, mean=0., std=1)
+        init.normal_(self.fc1.bias, mean=0., std=1)
+        init.normal_(self.fc2.weight, mean=0., std=1)
+        init.normal_(self.fc2.bias, mean=0., std=1)
 
     def forward(self, state):
         x = F.relu(self.fc1(state))
@@ -49,29 +53,40 @@ class A3CAgent:
             episode_reward = 0
             
             while not done and not truncated:
-                # Forward pass to get the action probabilities and state value
-                action_prob, state_value = self.a3c_network(torch.FloatTensor(state))
-                action_prob = action_prob.detach().numpy()
-                
-                # Sample action from the action probabilities
-                action = np.random.choice(len(action_prob), p=action_prob)
-                
-                # Take the action in the environment
-                next_state, reward, done, truncated, _ = env.step(action)
+                # Forward pass to get the action mean and state value
+                action_mean, state_value = self.a3c_network(torch.FloatTensor(state))
+
+                # Create a normal distribution with the mean from the network
+                action_distribution = torch.distributions.Normal(action_mean, torch.tensor([0.1, 0.1, 0.1, 0.1]))
+
+                # Sample an action from the distribution
+                actual_action = action_distribution.sample()
+
+                # Use the actual action in env.step()
+                next_state, reward, done, truncated, _ = env.step(actual_action.detach().numpy())
                 
                 # Calculate the advantage
                 next_state_value = self.a3c_network(torch.FloatTensor(next_state))[1].detach().numpy()
                 advantage = reward + gamma * next_state_value * (1 - int(done)) - state_value.detach().numpy()
-                
-                # Calculate the loss
-                critic_loss = F.mse_loss(state_value, torch.tensor([reward + gamma * next_state_value * (1 - int(done))]))
-                actor_loss = -torch.log(action_prob[action]) * advantage
+
+                # Create the target value and reshape it to match the shape of state_value
+                target_value = torch.tensor([reward + gamma * next_state_value * (1 - int(done))]).view(state_value.shape)
+
+                # Calculate the critic loss
+                critic_loss = F.mse_loss(state_value, target_value)
+
+                # Compute the log probability of the sampled action and compute the actor loss
+                log_prob = action_distribution.log_prob(actual_action)
+                actor_loss = -(log_prob * torch.tensor(advantage, dtype=torch.float32)).sum()
+
+                # Calculate the total loss
                 total_loss = actor_loss + critic_loss
-                
+
                 # Perform a gradient step
                 self.optimizer.zero_grad()
                 total_loss.backward()
                 self.optimizer.step()
+
                 
                 # Update the state and episode reward
                 state = next_state
@@ -106,8 +121,8 @@ class A3CAgent:
 
 
 # Set up the environment
-env = gym.make("BipedalWalker-v3", render_mode="human")
-#env = gym.make("BipedalWalker-v3")
+#env = gym.make("BipedalWalker-v3", render_mode="human")
+env = gym.make("BipedalWalker-v3")
 
 # Constants
 num_episodes = 1000

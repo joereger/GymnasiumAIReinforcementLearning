@@ -7,9 +7,9 @@ import torch.optim as optim
 import pygame
 import os
 
-class AG3Network(nn.Module):
+class A3CNetwork(nn.Module):
     def __init__(self, state_dim, action_dim):
-        super(AG3Network, self).__init__()
+        super(A3CNetwork, self).__init__()
         self.fc1 = nn.Linear(state_dim, 512)
         self.fc2 = nn.Linear(512, 256)
         self.fc3 = nn.Linear(256, action_dim)
@@ -27,9 +27,9 @@ class AG3Network(nn.Module):
         x = torch.tanh(self.fc3(x))
         return x
 
-class AG3Agent:
+class A3CAgent:
     def __init__(self, state_dim, action_dim, learning_rate=0.0001):
-        self.ag3_network = AG3Network(state_dim, action_dim)
+        self.ag3_network = A3CNetwork(state_dim, action_dim)
         self.optimizer = optim.Adam(self.ag3_network.parameters(), lr=learning_rate)
 
     def train(self, env, num_episodes=1000):
@@ -61,21 +61,19 @@ class AG3Agent:
             print(f"Could not load models. Error: {e}")
 
 
-
-
 # Set up the environment
-#env = gym.make("BipedalWalker-v3", render_mode="human")
-env = gym.make("BipedalWalker-v3")
+env = gym.make("BipedalWalker-v3", render_mode="human")
+#env = gym.make("BipedalWalker-v3")
 
 # Constants
 num_episodes = 1000
 PATH = 'data/'
-PREFIX = 'bipedal_walker_v04'
+PREFIX = 'bipedal_walker_ag3_v01'
 
 # Initialize the PPOAgent
 state_dim = env.observation_space.shape[0]
 action_dim = env.action_space.shape[0]
-agent = AG3Agent(state_dim, action_dim)
+agent = A3CAgent(state_dim, action_dim)
 
 
 # Load the agents

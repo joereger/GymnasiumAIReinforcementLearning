@@ -4,7 +4,7 @@ This document details the different solution approaches implemented or explored 
 
 ## Approach 1: A3C (Asynchronous Advantage Actor-Critic)
 
-- **Source File:** `bipedal_walker-a3c.py`
+- **Source File:** `bipedal_walker/bipedal_walker-a3c.py`
 - **Algorithm:** Asynchronous Advantage Actor-Critic (A3C). This is a policy gradient algorithm that uses multiple parallel agents to explore the environment and update a global network.
 - **Key Hyperparameters & Configuration:**
     - (To be filled in by reviewing `bipedal_walker-a3c.py` - e.g., learning rates, discount factor, number of workers, network architecture).
@@ -15,7 +15,7 @@ This document details the different solution approaches implemented or explored 
 
 ## Approach 2: Genetic Algorithm
 
-- **Source File:** `bipedal_walker_plus_genetic_algorithm.py`
+- **Source File:** `bipedal_walker/bipedal_walker_plus_genetic_algorithm.py`
 - **Algorithm:** A genetic algorithm (GA). This is an evolutionary algorithm that maintains a population of solutions (e.g., neural network weights) and iteratively improves them through selection, crossover, and mutation.
 - **Key Hyperparameters & Configuration:**
     - (To be filled in by reviewing `bipedal_walker_plus_genetic_algorithm.py` - e.g., population size, mutation rate, crossover strategy, fitness function details).
@@ -26,7 +26,7 @@ This document details the different solution approaches implemented or explored 
 
 ## Approach 3: (Generic/Initial)
 
-- **Source File:** `bipedal_walker.py`
+- **Source File:** `bipedal_walker/bipedal_walker.py`
 - **Algorithm:** (To be determined by reviewing `bipedal_walker.py`. This might be a simpler RL algorithm, a baseline, or an earlier attempt).
 - **Key Hyperparameters & Configuration:**
     - (To be filled in).

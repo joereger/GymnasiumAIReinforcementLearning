@@ -4,7 +4,7 @@ This document details the different solution approaches implemented or explored 
 
 ## Approach 1: (Main Solution)
 
-- **Source File:** `lunar_lander.py`
+- **Source File:** `lunar_lander/lunar_lander.py`
 - **Algorithm:** (To be determined by reviewing `lunar_lander.py` - likely a DQN for the discrete version or an actor-critic method like DDPG, TD3, or SAC for the continuous version).
 - **Key Hyperparameters & Configuration:**
     - (To be filled in by reviewing `lunar_lander.py` - e.g., learning rates, discount factor, replay buffer size, network architectures for actor/critic, exploration strategy parameters).

@@ -125,7 +125,7 @@ env = gym.make("BipedalWalker-v3")
 
 # Constants
 num_episodes = 1000
-PATH = 'data/'
+PATH = 'data/bipedal_walker/'
 PREFIX = 'bipedal_walker_a3c_v03'
 
 # Initialize the A3C agent
@@ -193,6 +193,3 @@ plt.ylabel('Avg Episode Reward')
 plt.title('Grid Search Results')
 plt.legend()
 plt.show()
-
-
-

@@ -1,0 +1,35 @@
+# Core Reinforcement Learning and Utilities
+gymnasium==1.1.1
+pygame==2.6.1
+numpy==1.25.2  # Changed from 2.2.5 to be compatible with tensorflow (<2.0.0, >=1.23.5)
+matplotlib==3.10.3
+cloudpickle==3.1.1
+Farama-Notifications==0.0.4 # Assumed current as not in `pip list --outdated`
+typing-extensions==4.13.2 # Explicitly added due to previous conflict, ensure it's compatible or adjust
+
+# Deep Learning Frameworks
+torch==2.7.0
+torchvision==0.22.0 # Updated to latest available, for compatibility with torch 2.7.0
+
+# TensorFlow/Keras for cart_pole.py (macOS specific version)
+tensorflow-macos==2.16.2
+
+# Specific Environment Dependencies
+box2d-py==2.3.8 # For BipedalWalker, LunarLander
+
+# --- Notes ---
+# The list above includes primary dependencies. Versions updated based on dependency requirements.
+# Previous conflict was resolved by:
+# 1. Downgrading numpy from 2.2.5 to 1.25.2 to satisfy tensorflow's requirement (numpy<2.0.0,>=1.23.5).
+#
+# If further conflicts persist, try removing specific version pins to let pip resolve dependencies.
+# For example, you might try: `pip install -r requirements.txt --upgrade --no-deps` and then
+# `pip check` to see if there are any issues with the installed packages.
+
+# For specific Gymnasium environment families, you might need extras beyond box2d.
+# For example, for Atari:
+# gymnasium[atari]
+# gymnasium[accept-rom-license] # if using Atari ROMs
+
+# To generate a complete list of ALL packages in your current environment:
+# pip freeze > full_requirements.txt

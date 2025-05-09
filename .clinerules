@@ -13,14 +13,26 @@ I am Cline, an expert software engineer with a unique characteristic: my memory 
     *   `progress.md`
 
 2.  **Environment-Specific Context:**
-    *   If the task pertains to a specific Gymnasium environment (e.g., "work on bipedal_walker" or "debug lunar_lander.py"), I MUST then read ALL Markdown files within the corresponding `memory-bank/environments/<environment_name>/` directory. For example, for `bipedal_walker`, I would read all files in `memory-bank/environments/bipedal_walker/`.
-    *   The environment-specific files include:
+    *   If the task pertains to a specific Gymnasium environment (e.g., "work on bipedal_walker" or "debug lunar_lander.py"), I MUST then read ALL Markdown files within the corresponding `memory-bank/environments/<environment_name>/` directory AND the code files within the corresponding root-level `<environment_name>/` code directory. For example, for `bipedal_walker`, I would read all files in `memory-bank/environments/bipedal_walker/` and all files in `bipedal_walker/`.
+    *   The environment-specific Memory Bank files include:
         *   `environment_brief.md`
         *   `approaches.md`
         *   `systemPatterns.md`
         *   `techContext.md`
         *   `activeContext.md`
         *   `progress.md`
+
+3.  **Code Structure Principle:**
+    *   Each environment's code (located in its respective root-level directory, e.g., `lunar_lander/`) IS INTENDED TO BE SELF-CONTAINED.
+    *   This means all utility functions or helper scripts used by an environment's solutions should reside within that environment's specific code directory (e.g., `lunar_lander/visualization_utils.py`).
+    *   Duplication of utility code across environment directories is acceptable and expected to maintain this self-containment. This ensures that each environment can be understood and run independently.
+    *   When working on a specific environment, assume all necessary code dependencies are within its dedicated folder. Avoid referencing code from other environment folders or a shared root-level utilities folder (unless explicitly stated as a project-wide shared utility in the top-level `systemPatterns.md`).
+
+4.  **Data Storage Principle:**
+    *   Each environment has its own dedicated data directory at `data/<environment_name>/` (e.g., `data/bipedal_walker/`, `data/cart_pole/`).
+    *   All model files, training logs, results, and any other data specific to an environment should be stored in its dedicated data directory.
+    *   This ensures that data from different environments doesn't get mixed or overwritten, and maintains the self-containment principle.
+    *   When saving or loading files in environment code, ALWAYS use paths relative to the environment's dedicated data directory (e.g., `data/cart_pole/model.keras`).
 
 ## Documentation Updates:
 

@@ -4,7 +4,7 @@ This document details the different solution approaches implemented or explored 
 
 ## Approach 1: (Discrete Version Solution)
 
-- **Source File:** `mountain_car_discrete.py`
+- **Source File:** `mountain_car/mountain_car_discrete.py`
 - **Algorithm:** (To be determined by reviewing `mountain_car_discrete.py` - likely Q-learning with function approximation (e.g., tile coding) or a simple DQN, given the discrete action space and sparse rewards).
 - **Key Hyperparameters & Configuration:**
     - (To be filled in by reviewing `mountain_car_discrete.py` - e.g., learning rate, discount factor, exploration strategy, details of function approximation if used, network architecture for DQN).

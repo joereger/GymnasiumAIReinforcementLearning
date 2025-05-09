@@ -8,7 +8,7 @@ from collections import deque
 from torch.distributions import Normal
 import pygame
 import os
-from visualization_utils import * # mah little helper utils for visualizing activations
+import numpy as np
 
 # Actor Network
 class ActorNetwork(nn.Module):
@@ -71,10 +71,8 @@ class PPOAgent:
         self.critic = CriticNetwork(state_dim)
         
         # Initialize optimizers
-        #self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=learning_rate_actor)
-        #self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=learning_rate_critic)
-        self.actor_optimizer = optim.RMSprop(self.actor.parameters(), lr=learning_rate_actor)
-        self.critic_optimizer = optim.RMSprop(self.critic.parameters(), lr=learning_rate_critic)
+        self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=learning_rate_actor)
+        self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=learning_rate_critic)
         
         # Initialize hyperparameters
         self.gamma = gamma
@@ -161,7 +159,8 @@ class PPOAgent:
         #print(f"Critic Loss: {critic_loss.item():.4f}, Actor Loss: {actor_loss.item():.4f}, Mean Action: {mean.mean().item():.4f}")
 
 
-    def train(self, env, num_episodes=1000, epochs=10):
+    def train(self, env, num_episodes=500, epochs=10):
+        print('TRAINING')
         episode_rewards = []  # To store cumulative rewards for each episode
 
         for episode in range(num_episodes):
@@ -181,6 +180,10 @@ class PPOAgent:
                 episode_reward += reward
                 timesteps += 1
                 #print(f"ep: {episode}  t: {timesteps}  reward: {reward:.4f}  ep_reward: {episode_reward:.4f}  action: {action}")
+                #if pygame.display.get_init():
+                #    akeys = pygame.key.get_pressed()
+                #    if keys[pygame.K_q]:
+                #        print(f"Q PRESSED!!!!")
 
             # After collecting enough experiences, update the policy
             for _ in range(epochs):
@@ -190,10 +193,7 @@ class PPOAgent:
                 self.update_policy(list(states), list(actions), advantages, value_targets)
 
             episode_rewards.append(episode_reward)
-            print(f"Episode {episode+1}/{num_episodes} - Reward: {episode_reward}")
-
-            # Visualize the activations
-            plot_activations(activations)
+            #print(f"Training Episode {episode+1}/{num_episodes} - Reward: {episode_reward}")
 
         return episode_rewards
     
@@ -234,40 +234,119 @@ def evaluate(agent, env, num_episodes=10):
             if terminated or truncated:
                 break
         episode_rewards.append(episode_reward)
-        print(f"Evaluation Episode {i_episode+1}: Reward = {episode_reward}")
+        #print(f"Evaluation Episode {i_episode+1}: Reward = {episode_reward}")
     avg_reward = sum(episode_rewards) / num_episodes
     print(f"Average Reward over {num_episodes} episodes: {avg_reward}")
+
+# Genetic Algorithm Functions
+def evaluate_population(population, env, agent, num_episodes=10):
+    print('EVALUATE POPULATION')
+    fitness_scores = []
+    individual_count = 0
+    for individual in population:
+        total_reward = 0
+        individual_count += 1
+        for _ in range(num_episodes):
+            state, _ = env.reset()
+            terminated = False
+            truncated = False
+            while not terminated and not truncated:
+                action = agent.actor(torch.FloatTensor(state)).detach().numpy()
+                next_state, reward, terminated, truncated, _ = env.step(action)
+                total_reward += reward
+                state = next_state
+        #print('Individual', individual_count,' avg reward: ', total_reward / num_episodes)
+        fitness_scores.append(total_reward / num_episodes)
+    return np.array(fitness_scores)
+
+def select_parents(population, fitness_scores, num_parents):
+    print('SELECT PARENTS')
+    parents = []
+    for _ in range(num_parents):
+        selected_parent = np.argmax(fitness_scores)
+        parents.append(population[selected_parent])
+        fitness_scores[selected_parent] = -1e9  # set to a low value to avoid reselection
+    return parents
+
+def crossover_and_mutate(parents, num_offspring, mutation_rate=0.5):
+    print('CROSSOVER AND MUTATE')
+    offspring = []
+    while len(offspring) < num_offspring:
+        parent1, parent2 = np.random.choice(parents, 2, replace=False)
+        child_state_dict = {}
+        for key in parent1.keys():
+            if np.random.rand() < 0.5:
+                child_state_dict[key] = parent1[key]
+            else:
+                child_state_dict[key] = parent2[key]
+            
+            # Apply mutation
+            if np.random.rand() < mutation_rate:
+                mutation = torch.randn_like(child_state_dict[key]) * 0.5
+                child_state_dict[key] += mutation
+        offspring.append(child_state_dict)
+    return offspring
+
+# New function to mutate the actor network
+def mutate_actor_network(agent, mutation_rate):
+    actor_state_dict = agent.actor.state_dict()
+    for key in actor_state_dict.keys():
+        if np.random.rand() < mutation_rate:
+            mutation = torch.randn_like(actor_state_dict[key]) * 0.5
+            actor_state_dict[key] += mutation
+    agent.actor.load_state_dict(actor_state_dict)
+
+
 
 # Set up the environment
 #env = gym.make("BipedalWalker-v3", render_mode="human")
 env = gym.make("BipedalWalker-v3")
-
-# Constants
-num_episodes = 1000
 PATH = 'data/'
-PREFIX = 'bipedal_walker_v04'
+PREFIX = 'bipedal_walker_GA_V03'
+
+# Initialize GA parameters
+num_cycles = 20
+population_size = 100
+num_parents = 5
+num_offspring = population_size - num_parents
+num_generations = 5
+initial_mutation_rate = 0.99
+ppo_episodes = 400
 
 # Initialize the PPOAgent
 state_dim = env.observation_space.shape[0]
 action_dim = env.action_space.shape[0]
 agent = PPOAgent(state_dim, action_dim)
 
-# Visualization
-plt.ion()
-plt.axis('off')
-plt.show()
-activations = {}
-register_hooks(agent.actor, activations)
+# 1. GA to seed PPO with best starter candidate... Initialize population with random policies
+fitness_scores = np.zeros(population_size)  # Assuming population_size is defined
+population = [torch.load('data/bipedal_walker_BASELINE_actor.pth') for _ in range(population_size)]
 
-# Load the agents
-agent.load(PATH + PREFIX + '_actor.pth', PATH + PREFIX + '_critic.pth')
+# Main loop for the hybrid approach
+for cycle in range(num_cycles):  # Number of cycles
+    print(f"CYCLE {cycle+1} beginning")
 
-# Train the agent
-agent.train(env, num_episodes)
-
-# Save the agents
-agent.save(PATH + PREFIX + '_actor.pth', PATH + PREFIX + '_critic.pth')
-
-# Evaluate the training
-#evaluate(agent, env)
-
+    # 2. Train PPO for 500 episodes
+    best_initial_policy = population[np.argmax(fitness_scores)]
+    agent.actor.load_state_dict(best_initial_policy)
+    agent.train(env, num_episodes=ppo_episodes)
+    
+    # 3. Mutate the state of the model at PPO 500 episodes
+    mutate_actor_network(agent, initial_mutation_rate)
+    
+    # 4. Run GA generations contest 
+    for generation in range(num_generations):
+        # Evaluate the fitness of each individual in the population
+        fitness_scores = evaluate_population(population, env, agent)
+        # Select the best parents based on fitness
+        parents = select_parents(population, fitness_scores, num_parents)
+        # Generate offspring through crossover and mutation
+        offspring = crossover_and_mutate(parents, num_offspring)
+        # Create new population with parents and offspring
+        population = parents + offspring
+        # Log the best fitness score in the generation
+        print(f"Generation {generation+1}, Best Fitness: {max(fitness_scores)}")
+    
+    # 5. Iterate 2, 3, and 4
+    initial_mutation_rate *= 0.9  # Reduce mutation rate
+    ppo_episodes += 100  # Increase PPO episodes

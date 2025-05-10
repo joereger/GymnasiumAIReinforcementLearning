@@ -138,7 +138,7 @@ class DQNAgent:
 
         self.optimizer.zero_grad()
         loss.backward()
-        # torch.nn.utils.clip_grad_norm_(self.policy_net.parameters(), 1.0) # Optional: gradient clipping
+        torch.nn.utils.clip_grad_norm_(self.policy_net.parameters(), 1.0) # Gradient clipping enabled
         self.optimizer.step()
 
         if self.current_frames % self.target_update_freq == 0:
@@ -320,9 +320,8 @@ def train_pong_agent(human_render_during_training=False, load_checkpoint_flag=Fa
                 with open(STATS_PATH, 'r') as f:
                     stats = json.load(f)
                 all_episode_stats = stats.get("episode_stats", [])
-                # agent.current_frames should be set by agent.load() if model had it, otherwise use stats
-                # If model doesn't save current_frames, uncomment next line
-                # agent.current_frames = stats.get("total_agent_steps_completed", agent.current_frames) 
+                # Restore current_frames from stats. Default to 0 if not found or if stats file is new.
+                agent.current_frames = stats.get("total_agent_steps_completed", 0) 
                 start_episode = stats.get("last_completed_episode_number", 0) + 1
                 best_eval_reward = stats.get("best_eval_reward_achieved", -float('inf'))
                 cumulative_training_time_seconds_loaded = stats.get("cumulative_training_time_seconds", 0.0)
@@ -337,6 +336,40 @@ def train_pong_agent(human_render_during_training=False, load_checkpoint_flag=Fa
     # For plotting avg rewards later
     # We'll derive all_episode_rewards from all_episode_stats for plotting
     
+    # --- Replay Buffer Warmup ---
+    WARMUP_STEPS = 50000 # Number of steps to warm up the buffer
+    if not load_checkpoint_flag or agent.current_frames < WARMUP_STEPS : # Only warmup if not resuming a sufficiently trained agent or if current frames are less than warmup
+        print(f"Warming up replay buffer with random policy for {WARMUP_STEPS} steps...")
+        obs_warmup, _ = env.reset(seed=SEED -1) # Use a different seed for warmup
+        state_warmup = frame_stacker.reset(obs_warmup)
+        frames_done_warmup = 0
+        while frames_done_warmup < WARMUP_STEPS:
+            action_warmup = env.action_space.sample()
+            next_obs_warmup, reward_warmup, terminated_warmup, truncated_warmup, _ = env.step(action_warmup)
+            done_warmup = terminated_warmup or truncated_warmup
+            
+            next_state_warmup = frame_stacker.step(next_obs_warmup)
+            clipped_reward_warmup = np.sign(reward_warmup) # Reward Clipping
+            replay_buffer.store((state_warmup, action_warmup, clipped_reward_warmup, next_state_warmup, float(done_warmup)))
+            
+            if done_warmup:
+                obs_warmup, _ = env.reset(seed=SEED + frames_done_warmup) # Vary seed on reset, ensure positive
+                state_warmup = frame_stacker.reset(obs_warmup)
+            else:
+                state_warmup = next_state_warmup
+            frames_done_warmup +=1
+            if frames_done_warmup % 1000 == 0:
+                print(f"Warmup step {frames_done_warmup}/{WARMUP_STEPS}")
+        print("Replay buffer warmup complete.")
+        # Reset agent's current_frames if warmup happened for a new training run,
+        # as act() increments it and warmup shouldn't count towards epsilon decay of main training.
+        # However, if loading a checkpoint, agent.current_frames is already set from stats.
+        # The warmup logic above is primarily for a fresh start or if a loaded agent has very few frames.
+        # If agent.current_frames was loaded from stats and is > WARMUP_STEPS, warmup is skipped.
+        # If agent.current_frames was loaded and < WARMUP_STEPS, it continues from there.
+        # If fresh start (agent.current_frames = 0), it does full warmup.
+        # The agent.act() calls during main training will correctly use the loaded/progressed current_frames.
+
     session_start_time = time.time()
 
     print(f"Starting training from episode {start_episode} up to {MAX_EPISODES} or until {MAX_FRAMES_TOTAL} agent steps...")
@@ -348,11 +381,11 @@ def train_pong_agent(human_render_during_training=False, load_checkpoint_flag=Fa
         obs, info = env.reset(seed=SEED + episode_num)
         state = frame_stacker.reset(obs)
         done = False
-        current_episode_reward = 0
+        current_episode_reward = 0 # Raw reward for this episode for logging
         current_episode_steps = 0
 
         while not done:
-            action = agent.act(state)
+            action = agent.act(state) # agent.current_frames is incremented here
             next_obs, reward, terminated, truncated, info = env.step(action)
             done = terminated or truncated
             
@@ -360,10 +393,11 @@ def train_pong_agent(human_render_during_training=False, load_checkpoint_flag=Fa
                 env.render()
 
             next_state = frame_stacker.step(next_obs)
-            replay_buffer.store((state, action, reward, next_state, float(done)))
+            clipped_reward = np.sign(reward) # Reward Clipping
+            replay_buffer.store((state, action, clipped_reward, next_state, float(done)))
 
             state = next_state
-            current_episode_reward += reward
+            current_episode_reward += reward # Log raw reward
             current_episode_steps += 1
             
             loss = agent.learn(replay_buffer) # agent.current_frames is incremented inside act()

@@ -10,6 +10,7 @@ from collections import deque
 import time
 import matplotlib.pyplot as plt
 import os
+import json # For saving/loading stats
 import ale_py # Import ale_py
 
 # --- Device Configuration ---
@@ -166,10 +167,22 @@ def plot_rewards(rewards, avg_rewards, filename="pong_rewards.png"):
     plt.close()
     print(f"Plot saved to {filename}")
 
+# --- Helper to format time ---
+def format_time(seconds):
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    secs = int(seconds % 60)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
 # --- Evaluation ---
 def evaluate_pong_agent(env_name, model_path_to_load, num_episodes=10, human_render=False):
     print(f"\nEvaluating agent with model: {model_path_to_load} for {num_episodes} episodes...")
-    eval_render_mode = "human" if human_render else "rgb_array" # rgb_array for consistency if not human
+    eval_render_mode = "human" if human_render else "rgb_array"
+    
+    # Ensure ALE is registered for this new env instance
+    if 'ale_py' in globals() and hasattr(ale_py, '__version__'):
+        gym.register_envs(ale_py)
+        
     eval_env = gym.make(env_name, render_mode=eval_render_mode, repeat_action_probability=0.0)
     
     ACTION_SPACE_SIZE = eval_env.action_space.n
@@ -234,25 +247,26 @@ def train_pong_agent(human_render_during_training=False, load_checkpoint_flag=Fa
     TARGET_UPDATE_FREQ = 1000 # Agent steps, defined inside train_pong_agent
     EPSILON_START = 1.0 # Defined inside train_pong_agent
     EPSILON_END = 0.01 # Defined inside train_pong_agent
-    EPSILON_DECAY_FRAMES = int(1e6) # Agent steps, defined inside train_pong_agent
+    EPSILON_DECAY_FRAMES = int(1e6)
 
-    MAX_EPISODES = 5000 # Defined inside train_pong_agent
-    MAX_FRAMES_TOTAL = int(2e6) # Defined inside train_pong_agent
-    EVAL_INTERVAL_EPISODES = 100 # Defined inside train_pong_agent
-    SAVE_INTERVAL_EPISODES = 500 # Defined inside train_pong_agent
-    FRAMES_PER_STATE = 4 # Defined inside train_pong_agent
+    MAX_EPISODES = 5000
+    MAX_FRAMES_TOTAL = int(2e6)
+    EVAL_INTERVAL_EPISODES = 10 # Changed from 100
+    SAVE_INTERVAL_EPISODES = 10 # Changed from 500
+    FRAMES_PER_STATE = 4
 
     # Construct path relative to the script's location to ensure it's project root based
     SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
     PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
     DATA_DIR = os.path.join(PROJECT_ROOT, "data", "pong")
     os.makedirs(DATA_DIR, exist_ok=True)
-    MODEL_PATH = os.path.join(DATA_DIR, "pong_dqn_model.pth")
+    MODEL_PATH = os.path.join(DATA_DIR, "pong_dqn_model.pth") # Regular checkpoint
     BEST_MODEL_PATH = os.path.join(DATA_DIR, "pong_dqn_best_model.pth")
     REWARDS_PLOT_PATH = os.path.join(DATA_DIR, "pong_training_rewards.png")
+    STATS_PATH = os.path.join(DATA_DIR, "pong_training_stats.json") # For resumable stats
 
     # Seed for reproducibility
-    SEED = 42 # Defined inside train_pong_agent
+    SEED = 42
     random.seed(SEED)
     np.random.seed(SEED)
     torch.manual_seed(SEED)
@@ -286,26 +300,56 @@ def train_pong_agent(human_render_during_training=False, load_checkpoint_flag=Fa
     if load_checkpoint_flag and os.path.exists(MODEL_PATH):
         print(f"Loading model from {MODEL_PATH}")
         agent.load(MODEL_PATH)
-        # Note: If resuming, you might want to also save/load optimizer state and agent.current_frames
-        # For simplicity here, we just load weights and epsilon decay continues based on new current_frames.
+    
+    # Initialize stats
+    all_episode_stats = [] # List of dicts, one per episode
+    start_episode = 1
+    cumulative_training_time_seconds_loaded = 0.0
+    best_eval_reward = -float('inf') # Will be loaded from stats if available
+
+    if load_checkpoint_flag:
+        if os.path.exists(MODEL_PATH):
+            print(f"Loading model checkpoint from {MODEL_PATH}")
+            agent.load(MODEL_PATH) # Loads weights and sets agent.current_frames
+        else:
+            print(f"Checkpoint {MODEL_PATH} not found. Starting new training.")
         
-    replay_buffer = ReplayBuffer(size=REPLAY_BUFFER_SIZE) # Defined inside train_pong_agent
+        if os.path.exists(STATS_PATH):
+            print(f"Loading training stats from {STATS_PATH}")
+            try:
+                with open(STATS_PATH, 'r') as f:
+                    stats = json.load(f)
+                all_episode_stats = stats.get("episode_stats", [])
+                # agent.current_frames should be set by agent.load() if model had it, otherwise use stats
+                # If model doesn't save current_frames, uncomment next line
+                # agent.current_frames = stats.get("total_agent_steps_completed", agent.current_frames) 
+                start_episode = stats.get("last_completed_episode_number", 0) + 1
+                best_eval_reward = stats.get("best_eval_reward_achieved", -float('inf'))
+                cumulative_training_time_seconds_loaded = stats.get("cumulative_training_time_seconds", 0.0)
+                print(f"Resuming from episode {start_episode}, total steps: {agent.current_frames}, best_eval_reward: {best_eval_reward:.2f}, cumulative_time: {format_time(cumulative_training_time_seconds_loaded)}")
+            except json.JSONDecodeError:
+                print(f"Error decoding {STATS_PATH}. Starting with fresh stats.")
+        else:
+            print(f"Stats file {STATS_PATH} not found. Starting with fresh stats.")
 
-    all_episode_rewards = [] # Defined inside train_pong_agent
-    avg_episode_rewards = [] # Defined inside train_pong_agent
-    best_eval_reward = -float('inf') # Defined inside train_pong_agent
-    total_agent_steps = agent.current_frames # Start from loaded frames if any
+    replay_buffer = ReplayBuffer(size=REPLAY_BUFFER_SIZE)
+    
+    # For plotting avg rewards later
+    # We'll derive all_episode_rewards from all_episode_stats for plotting
+    
+    session_start_time = time.time()
 
-    print(f"Starting training for {MAX_EPISODES} episodes or until {MAX_FRAMES_TOTAL} agent steps...")
+    print(f"Starting training from episode {start_episode} up to {MAX_EPISODES} or until {MAX_FRAMES_TOTAL} agent steps...")
     if human_render_during_training:
         print("Human rendering enabled during training. This will be slower.")
 
-    for episode in range(1, MAX_EPISODES + 1):
-        obs, info = env.reset(seed=SEED + episode)
+    for episode_num in range(start_episode, MAX_EPISODES + 1):
+        episode_start_time = time.time()
+        obs, info = env.reset(seed=SEED + episode_num)
         state = frame_stacker.reset(obs)
         done = False
-        episode_reward = 0
-        episode_steps = 0
+        current_episode_reward = 0
+        current_episode_steps = 0
 
         while not done:
             action = agent.act(state)
@@ -318,55 +362,95 @@ def train_pong_agent(human_render_during_training=False, load_checkpoint_flag=Fa
             next_state = frame_stacker.step(next_obs)
             replay_buffer.store((state, action, reward, next_state, float(done)))
 
-            state = next_state # Defined inside train_pong_agent
-            episode_reward += reward # Defined inside train_pong_agent
-            episode_steps += 1 # Defined inside train_pong_agent
-            # total_agent_steps is managed by agent.current_frames now
-
-            loss = agent.learn(replay_buffer)
+            state = next_state
+            current_episode_reward += reward
+            current_episode_steps += 1
+            
+            loss = agent.learn(replay_buffer) # agent.current_frames is incremented inside act()
 
             if agent.current_frames >= MAX_FRAMES_TOTAL:
                 print(f"Reached max total agent steps ({MAX_FRAMES_TOTAL}). Stopping training.")
                 done = True
+        
+        episode_duration_seconds = time.time() - episode_start_time
+        current_session_active_time = time.time() - session_start_time
+        total_cumulative_time_seconds = cumulative_training_time_seconds_loaded + current_session_active_time
 
-        all_episode_rewards.append(episode_reward) # Defined inside train_pong_agent
-        avg_reward = np.mean(all_episode_rewards[-100:]) # Defined inside train_pong_agent
-        avg_episode_rewards.append(avg_reward) # Defined inside train_pong_agent
+        episode_data = {
+            "episode_number": episode_num,
+            "reward": current_episode_reward,
+            "steps": current_episode_steps,
+            "epsilon": agent.get_epsilon(),
+            "timestamp_end_episode": time.time(),
+            "duration_episode_seconds": episode_duration_seconds
+        }
+        all_episode_stats.append(episode_data)
+        
+        # For plotting convenience
+        rewards_for_plot = [e['reward'] for e in all_episode_stats]
+        avg_reward_for_plot = np.mean(rewards_for_plot[-100:])
+        
+        print(f"Episode: {episode_num}/{MAX_EPISODES} | Steps: {current_episode_steps} | Total Steps: {agent.current_frames} | Reward: {current_episode_reward:.2f} | Avg Reward (100ep): {avg_reward_for_plot:.2f} | Epsilon: {agent.get_epsilon():.4f} | Cum. Time: {format_time(total_cumulative_time_seconds)}")
 
-        print(f"Episode: {episode}/{MAX_EPISODES} | Steps: {episode_steps} | Total Steps: {agent.current_frames} | Reward: {episode_reward:.2f} | Avg Reward (100ep): {avg_reward:.2f} | Epsilon: {agent.get_epsilon():.4f}")
-
-        if episode % EVAL_INTERVAL_EPISODES == 0:
-            # Periodic evaluation during training should not use human rendering by default
-            # It uses its own agent and env instance.
-            current_model_to_eval = BEST_MODEL_PATH if os.path.exists(BEST_MODEL_PATH) else MODEL_PATH
-            if not os.path.exists(current_model_to_eval) and episode > SAVE_INTERVAL_EPISODES : # if no best model yet, but a regular save should exist
-                 agent.save(MODEL_PATH) # ensure a model exists for eval if it's the first eval interval
-                 current_model_to_eval = MODEL_PATH
-
-            if os.path.exists(current_model_to_eval):
-                 eval_reward_val = evaluate_pong_agent(ENV_NAME, current_model_to_eval, num_episodes=5, human_render=False)
-                 print(f"Evaluation after Episode {episode}: Avg Reward = {eval_reward_val:.2f}")
+        if episode_num % EVAL_INTERVAL_EPISODES == 0:
+            current_model_to_eval_path = BEST_MODEL_PATH if os.path.exists(BEST_MODEL_PATH) else MODEL_PATH
+            # Ensure a model is saved before first evaluation if no best model exists yet
+            if not os.path.exists(current_model_to_eval_path) and episode_num >= SAVE_INTERVAL_EPISODES:
+                 agent.save(MODEL_PATH)
+                 current_model_to_eval_path = MODEL_PATH
+            
+            if os.path.exists(current_model_to_eval_path):
+                 eval_reward_val = evaluate_pong_agent(ENV_NAME, current_model_to_eval_path, num_episodes=5, human_render=False)
+                 print(f"Evaluation after Episode {episode_num}: Avg Reward = {eval_reward_val:.2f}")
                  if eval_reward_val > best_eval_reward:
                       best_eval_reward = eval_reward_val
                       agent.save(BEST_MODEL_PATH)
                       print(f"New best evaluation reward: {best_eval_reward:.2f}. Best model saved to {BEST_MODEL_PATH}")
             else:
-                 print(f"Skipping evaluation at episode {episode} as no model saved yet.")
+                 print(f"Skipping evaluation at episode {episode_num} as no model saved yet ({current_model_to_eval_path}).")
             
-            plot_rewards(all_episode_rewards, avg_episode_rewards, filename=REWARDS_PLOT_PATH)
+            # Plotting uses rewards_for_plot and its derived avg_reward_for_plot
+            plot_rewards(rewards_for_plot, [np.mean(rewards_for_plot[max(0,i-99):i+1]) for i in range(len(rewards_for_plot))], filename=REWARDS_PLOT_PATH)
 
-        if episode % SAVE_INTERVAL_EPISODES == 0:
+
+        if episode_num % SAVE_INTERVAL_EPISODES == 0:
             agent.save(MODEL_PATH)
-            print(f"Model saved at episode {episode} to {MODEL_PATH}")
-        
+            print(f"Model checkpoint saved at episode {episode_num} to {MODEL_PATH}")
+            # Save stats with checkpoint
+            stats_to_save = {
+                "episode_stats": all_episode_stats,
+                "total_agent_steps_completed": agent.current_frames,
+                "last_completed_episode_number": episode_num,
+                "best_eval_reward_achieved": best_eval_reward,
+                "cumulative_training_time_seconds": total_cumulative_time_seconds
+            }
+            with open(STATS_PATH, 'w') as f:
+                json.dump(stats_to_save, f, indent=4)
+            print(f"Training stats saved to {STATS_PATH}")
+
         if agent.current_frames >= MAX_FRAMES_TOTAL:
             break
 
     env.close()
     print("Training finished.")
+    # Final save of model and stats
     agent.save(MODEL_PATH)
-    plot_rewards(all_episode_rewards, avg_episode_rewards, filename=REWARDS_PLOT_PATH)
+    final_total_cumulative_time = cumulative_training_time_seconds_loaded + (time.time() - session_start_time)
+    final_stats_to_save = {
+        "episode_stats": all_episode_stats,
+        "total_agent_steps_completed": agent.current_frames,
+        "last_completed_episode_number": MAX_EPISODES if agent.current_frames < MAX_FRAMES_TOTAL else episode_num, # Save last completed episode
+        "best_eval_reward_achieved": best_eval_reward,
+        "cumulative_training_time_seconds": final_total_cumulative_time
+    }
+    with open(STATS_PATH, 'w') as f:
+        json.dump(final_stats_to_save, f, indent=4)
     print(f"Final model saved to {MODEL_PATH}")
+    print(f"Final training stats saved to {STATS_PATH}")
+    
+    final_rewards_for_plot = [e['reward'] for e in all_episode_stats]
+    final_avg_rewards_for_plot = [np.mean(final_rewards_for_plot[max(0,i-99):i+1]) for i in range(len(final_rewards_for_plot))]
+    plot_rewards(final_rewards_for_plot, final_avg_rewards_for_plot, filename=REWARDS_PLOT_PATH)
     print(f"Final rewards plot saved to {REWARDS_PLOT_PATH}")
     return agent
 

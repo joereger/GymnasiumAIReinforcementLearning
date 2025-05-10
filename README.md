@@ -1,6 +1,6 @@
 # Joe Reger's Reinforcement Learning Experiments with Gymnasium
 
-This repository contains a collection of experiments and solutions for various reinforcement learning problems using the [Gymnasium](https://gymnasium.farama.org/) library by the Farama Foundation. The primary goal is personal learning and exploration of different RL algorithms and techniques.
+This personal repository contains a collection of experiments and solutions for various reinforcement learning problems using the [Gymnasium](https://gymnasium.farama.org/) library by the Farama Foundation. The primary goal is personal learning and exploration of different RL algorithms and techniques.  Just playing around.
 
 ## Recent Results
 

@@ -1,19 +1,19 @@
 # Progress: Gymnasium Environment Solutions
 
-**Overall Project Status:** Code refactoring to folder-per-environment structure complete. Memory Bank documentation updated.
+**Overall Project Status:** Code refactoring to folder-per-environment structure complete. Memory Bank documentation updated. **New Pong environment setup initiated.**
 
 **What Works (Project Level):**
 - **Memory Bank Structure:**
     - All top-level Memory Bank files created and populated with initial content.
-    - `memory-bank/environments/` directory created with subdirectories for `bipedal_walker`, `cart_pole`, `lunar_lander`, and `mountain_car`.
-    - Each environment subdirectory contains a full set of placeholder Memory Bank files.
+    - `memory-bank/environments/` directory created with subdirectories for `bipedal_walker`, `cart_pole`, `lunar_lander`, `mountain_car`, **and `pong`**.
+    - Each environment subdirectory (including Pong) contains a full set of Memory Bank files.
     - `.clinerules` file created and updated with Memory Bank access rules and the new code structure principle.
 - **Code Structure:**
-    - Dedicated root-level directories created for each environment: `bipedal_walker/`, `cart_pole/`, `lunar_lander/`, `mountain_car/`.
-    - All respective Python solution scripts have been moved into these directories.
-    - `visualization_utils.py` has been copied into each environment directory to ensure self-containment.
+    - Dedicated root-level directories created for each environment: `bipedal_walker/`, `cart_pole/`, `lunar_lander/`, `mountain_car/`, **and `pong/`**.
+    - All respective Python solution scripts have been moved into these directories. **Initial `pong/pong_dqn.py` created.**
+    - `visualization_utils.py` has been copied into each existing environment directory to ensure self-containment. (Pong will integrate or create its own).
 - **Data Organization:**
-    - Environment-specific data directories created at `data/bipedal_walker/`, `data/cart_pole/`, `data/lunar_lander/`, and `data/mountain_car/`.
+    - Environment-specific data directories created at `data/bipedal_walker/`, `data/cart_pole/`, `data/lunar_lander/`, `data/mountain_car/`, **and `data/pong/`**.
     - Scripts updated to save and load models, results, and other artifacts to/from these environment-specific data directories.
     - This ensures data isolation between environments, preventing accidental overwrites and maintaining the self-containment principle.
 - **Memory Bank Updates:**
@@ -34,7 +34,8 @@
 
 **What's Left to Build (Project Level):**
 - **Resolve Dependency Conflicts:** User needs to run `pip install -r requirements.txt --upgrade` with the latest numpy-adjusted `requirements.txt`. If conflicts persist, consider more flexible version specifications.
-- **Populate Memory Bank Content:** Detailed documentation of algorithms, hyperparameters, results, and learnings needs to be added to the placeholder files within each environment's Memory Bank, based on reviewing the actual code.
+- **Populate Memory Bank Content:** Detailed documentation of algorithms, hyperparameters, results, and learnings needs to be added to the placeholder files within each environment's Memory Bank (for existing environments) and for Pong as development progresses.
+- **Pong Environment Development:** Implement and test the `pong/pong_dqn.py` agent.
 - **Delete Redundant Root-Level Files:** The original Python scripts (`bipedal_walker*.py`, `cart_pole.py`, `lunar_lander.py`, `mountain_car_discrete.py`, `visualization_utils.py`) at the project root need to be deleted by the user.
 - **Ensure Data Directory Usage:** Verify all future implementations follow the environment-specific data directory pattern for saving and loading models and results.
 
@@ -43,6 +44,11 @@
 - **Cart Pole:** Code (`cart_pole/cart_pole.py`, `cart_pole/visualization_utils.py`) refactored into `cart_pole/` directory. Memory Bank files created.
 - **Lunar Lander:** Code (`lunar_lander/lunar_lander.py`, `lunar_lander/visualization_utils.py`) refactored into `lunar_lander/` directory. Memory Bank files created.
 - **Mountain Car:** Code (`mountain_car/mountain_car_discrete.py`, `mountain_car/visualization_utils.py`) refactored into `mountain_car/` directory. Memory Bank files created.
+- **Pong (`ALE/PongNoFrameskip-v4`):**
+    - Directory structure (`pong/`, `memory-bank/environments/pong/`, `data/pong/`) created.
+    - Initial Memory Bank files populated.
+    - `pong/pong_dqn.py` script created with DQN agent structure based on "Smart Defaults".
+    - **Next Step:** Begin training and evaluation.
 - **Other Environments:** Not yet started.
 
 **Known Issues (Project Level):**

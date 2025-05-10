@@ -2,7 +2,9 @@
 
 This repository contains a collection of experiments and solutions for various reinforcement learning problems using the [Gymnasium](https://gymnasium.farama.org/) library by the Farama Foundation. The primary goal is personal learning and exploration of different RL algorithms and techniques.
 
-## Recent Results: Freeway with Double DQN
+## Recent Results
+
+### Freeway with Double DQN
 
 ![Freeway Game Screenshot](assets/freeway_screenshot.png)
 
@@ -18,6 +20,29 @@ After implementing the Double DQN algorithm for the Atari Freeway environment wi
 - **Notable Achievements**: The agent achieved a high score of 10+ in later episodes, showing it learned to navigate traffic effectively
 
 The upward trend in rewards and steadily increasing Q-values demonstrate the effectiveness of the Double DQN architecture with frame skipping over standard DQN for this environment.
+
+### Bipedal Walker Experiments
+
+![Bipedal Walker Animation](assets/bipedal_walker.gif)
+
+For the challenging Bipedal Walker environment, multiple approaches have been implemented to explore different reinforcement learning techniques:
+
+**1. PPO (Proximal Policy Optimization)** - `bipedal_walker.py`
+- A policy gradient method that alternates between sampling data through interaction with the environment and optimizing a surrogate objective function
+- Features actor-critic architecture with separate networks for policy and value functions
+- Implements visualization of neural network activations for better understanding of the agent's decision-making
+
+**2. A3C (Asynchronous Advantage Actor-Critic)** - `bipedal_walker-a3c.py`
+- Leverages parallel actors to gather diverse experiences and stabilize training
+- Uses a shared network with both policy (actor) and value (critic) outputs
+- Includes a grid search implementation to optimize hyperparameters including learning rate, discount factor, and optimizer selection
+
+**3. Genetic Algorithm** - `bipedal_walker_plus_genetic_algorithm.py`
+- Evolutionary approach that maintains a population of potential solutions
+- Uses selection, crossover, and mutation to evolve network weights without traditional backpropagation
+- Provides an interesting contrast to gradient-based methods for complex control problems
+
+These diverse approaches demonstrate the trade-offs between different reinforcement learning paradigms when applied to challenging continuous control problems. More detailed information about each approach can be found in the environment's Memory Bank documentation.
 
 ## Project Structure
 

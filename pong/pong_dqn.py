@@ -240,7 +240,7 @@ def train_pong_agent(human_render_during_training=False, load_checkpoint_flag=Fa
     # Hyperparameters from "Smart Defaults"
     ENV_NAME = "PongNoFrameskip-v4"
     train_render_mode = "human" if human_render_during_training else None # Use None if not human rendering
-    LEARNING_RATE = 2.5e-4
+    LEARNING_RATE = 1e-4 # Changed from 2.5e-4
     BATCH_SIZE = 32 # Defined inside train_pong_agent
     REPLAY_BUFFER_SIZE = int(1e5) # Defined inside train_pong_agent
     GAMMA = 0.99 # Defined inside train_pong_agent

@@ -6,6 +6,7 @@ matplotlib==3.10.3
 cloudpickle==3.1.1
 Farama-Notifications==0.0.4 # Assumed current as not in `pip list --outdated`
 typing-extensions==4.13.2 # Explicitly added due to previous conflict, ensure it's compatible or adjust
+opencv-python>=4.5.0 # For preprocessing in Atari environments
 
 # Deep Learning Frameworks
 torch==2.7.0
@@ -16,6 +17,7 @@ tensorflow-macos==2.16.2
 
 # Specific Environment Dependencies
 box2d-py==2.3.8 # For BipedalWalker, LunarLander
+ale-py>=0.8.0 # For Atari environments including Freeway
 
 # --- Notes ---
 # The list above includes primary dependencies. Versions updated based on dependency requirements.
@@ -26,10 +28,24 @@ box2d-py==2.3.8 # For BipedalWalker, LunarLander
 # For example, you might try: `pip install -r requirements.txt --upgrade --no-deps` and then
 # `pip check` to see if there are any issues with the installed packages.
 
-# For specific Gymnasium environment families, you might need extras beyond box2d.
-# For example, for Atari:
-# gymnasium[atari]
-# gymnasium[accept-rom-license] # if using Atari ROMs
+# Environment-specific notes:
+# 1. For Box2D environments (BipedalWalker, LunarLander):
+#    Covered by box2d-py in the main dependencies.
+#
+# 2. For Atari environments (Freeway):
+#    If using zsh shell, you may encounter issues with brackets. 
+#    Instead of `pip install gymnasium[atari,accept-rom-license]`, use:
+#    `pip install ale-py` (included above)
+#
+#    Then in your code:
+#    ```python
+#    import gymnasium as gym
+#    import ale-py
+#    gym.register_envs(ale_py)
+#    ```
+#
+# 3. For MuJoCo environments (if added in future):
+#    `pip install "gymnasium[mujoco]"` (use quotes in zsh)
 
 # To generate a complete list of ALL packages in your current environment:
 # pip freeze > full_requirements.txt

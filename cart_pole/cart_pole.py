@@ -228,8 +228,9 @@ class DQNAgent:
                 # Force termination if episode reaches or exceeds 500 steps
                 if i >= 500:
                     print("Episode reached 500 steps - Environment solved!")
-                    print("Saving trained model as cartpole-dqn-solved.keras")
-                    self.save("data/cart_pole/cartpole-dqn-solved.keras")
+                    solved_model_path = os.path.join(project_root, "data", "cart_pole", "cartpole-dqn-solved.keras")
+                    print(f"Saving trained model as {os.path.basename(solved_model_path)}")
+                    self.save(solved_model_path)
                     terminated = True
                     # Break out of the episode loop immediately
                     break
@@ -244,7 +245,10 @@ class DQNAgent:
                 self.replay()
 
     def test(self):
-        self.load("data/cart_pole/cartpole-dqn.keras")
+        # Get project root directory for path resolution
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        model_path = os.path.join(project_root, "data", "cart_pole", "cartpole-dqn.keras")
+        self.load(model_path)
         for e in range(self.EPISODES):
             state = self.env.reset()
             state = np.reshape(state[0], [1, self.state_size])
@@ -261,14 +265,19 @@ class DQNAgent:
                     break
 
 if __name__ == "__main__":
+    # Get project root directory (regardless of where script is executed from)
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    
     # Create data directory if it doesn't exist
-    os.makedirs("data/cart_pole", exist_ok=True)
+    data_dir = os.path.join(project_root, "data", "cart_pole")
+    os.makedirs(data_dir, exist_ok=True)
     
     agent = DQNAgent()
     agent.run()
     
     # Save final model after all episodes complete
-    print("Training complete. Saving final model to data/cart_pole/cartpole-dqn-final.keras")
-    agent.save("data/cart_pole/cartpole-dqn-final.keras")
+    final_model_path = os.path.join(data_dir, "cartpole-dqn-final.keras")
+    print(f"Training complete. Saving final model to {final_model_path}")
+    agent.save(final_model_path)
     
     #agent.test()

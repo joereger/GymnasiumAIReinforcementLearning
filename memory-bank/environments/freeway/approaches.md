@@ -4,6 +4,80 @@ This document details the approaches implemented for the Freeway environment.
 
 ## Approach 1: Deep Q-Network (DQN) with Custom Rewards
 
+**Status**: Initial implementation, baseline approach
+
+## Approach 2: Double DQN with Frame Skipping
+ 
+- **Source File:** `freeway/freeway_double_dqn.py`
+- **Algorithm:** Double Deep Q-Network with frame skipping, experience replay, and target network
+
+### Implementation Overview
+
+This implementation uses a more sophisticated Double DQN architecture with standard Atari preprocessing techniques to address the limitations of the basic DQN approach.
+
+### Key Technical Components
+
+1. **Double DQN Algorithm**:
+   - Uses separate networks for action selection and evaluation
+   - Reduces overestimation bias in vanilla DQN
+   - More stable learning and better convergence
+
+2. **Frame Skipping**:
+   - Each action repeats for 4 frames
+   - Uses max pooling over last 2 frames to reduce flickering
+   - Significantly speeds up training (4x fewer decisions needed)
+
+3. **Standard Network Architecture**:
+   - 3-layer CNN architecture (vs 4 layers in Approach 1)
+   - Based on the proven architecture from DeepMind's Atari papers
+   - More efficient feature extraction
+
+### Neural Network Architecture
+
+```
+Input: 4×84×84 (4 stacked grayscale frames)
+
+Convolutional Layers:
+1. Conv2D: 32 filters, 8×8 kernel, stride 4, ReLU
+2. Conv2D: 64 filters, 4×4 kernel, stride 2, ReLU
+3. Conv2D: 64 filters, 3×3 kernel, stride 1, ReLU
+
+Fully Connected Layers:
+1. Dense: 512 units, ReLU
+2. Dense: 3 units (Q-values for NOOP, UP, DOWN actions)
+```
+
+### Optimized Hyperparameters
+
+- **Learning Rate**: 0.00025 (4x smaller than Approach 1)
+- **Discount Factor (γ)**: 0.99
+- **Replay Buffer Size**: 100,000 (10x larger than Approach 1)
+- **Batch Size**: 32
+- **Target Network Update Frequency**: Every 1,000 steps
+- **Exploration Strategy**: Linear ε decay from 1.0 to 0.01 over 500,000 frames
+- **Frame Skip**: 4 (standard in Atari literature)
+
+### Hardware Acceleration
+
+- **Apple Silicon Support**: Uses PyTorch's MPS backend to accelerate training on Apple M1 hardware
+- **Dynamic Device Selection**: Automatically detects and uses the most efficient compute device (MPS, CUDA, or CPU)
+- **Optimized Memory Usage**: Better suited for GPU acceleration with simplified network architecture
+
+### Performance Advantages
+
+- Theoretically capable of achieving much higher scores (30+ points) with sufficient training
+- More sample-efficient due to Double DQN algorithm
+- Faster training due to frame skipping and GPU acceleration
+- Natural exploration without action biasing leads to better policy learning
+
+### Results & Performance
+
+(To be filled in after training runs)
+
+### Learnings & Insights
+
+(To be filled in after analyzing training results)
+
 - **Source File:** `freeway/freeway.py`
 - **Algorithm:** Deep Q-Network (DQN) with experience replay and target network
 

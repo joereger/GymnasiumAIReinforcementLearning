@@ -1,31 +1,45 @@
 # Tech Context: Gymnasium Environment Solutions
 
 **Core Technologies:**
-- **Python:** The primary programming language for all development. (Specify version if known, e.g., Python 3.9+).
-- **OpenAI Gymnasium:** The core library providing the suite of reinforcement learning environments. (Specify version if known, e.g., Gymnasium 0.29.x).
-- **Reinforcement Learning Libraries:** (List any common RL libraries used across multiple environments, e.g., Stable Baselines3, RLlib, or custom implementations). If solutions are primarily custom, note that.
+- **Python:** The primary programming language for all development. Python 3.10+ is used.
+- **OpenAI Gymnasium:** The core library providing the suite of reinforcement learning environments. Using Gymnasium 1.1.1.
+- **PyTorch:** Deep learning framework used for implementing neural network-based agents (version 2.7.0).
+- **Reinforcement Learning Algorithms:** Custom implementations of various algorithms:
+  - DQN (Deep Q-Network) and variants (Double DQN)
+  - A3C (Asynchronous Advantage Actor-Critic)
+  - Genetic Algorithms
 - **NumPy:** For numerical operations, especially array manipulations for observations and actions.
-- **Matplotlib / Seaborn / Pygame (via Gymnasium):** For visualization of environment states, agent performance, or rendering environments. `visualization_utils.py` likely uses these.
+- **Matplotlib:** For visualization of training progress, rewards, and agent performance.
+- **OpenCV (cv2):** Used for image preprocessing in pixel-based environments like Atari games.
 
 **Development Setup:**
-- **Operating System:** (User's OS, e.g., macOS, Windows, Linux).
+- **Operating System:** macOS on Apple Silicon (M1).
 - **IDE/Editor:** VSCode.
-- **Virtual Environment:** Managed via `GymnasiumVENV/` (likely using `venv` or `conda`).
-- **Version Control:** Git (assumed, as `.gitignore` is present).
+- **Virtual Environment:** Managed via `GymnasiumVENV/` using venv.
+- **Version Control:** Git.
+- **Hardware Acceleration:** PyTorch with MPS (Metal Performance Shaders) support for Apple Silicon GPUs.
 
 **Technical Constraints:**
 - Solutions should be runnable within the provided Gymnasium environments.
-- Computational resources might be a constraint for training complex agents on some environments.
+- Compatibility with Apple Silicon hardware is prioritized to leverage MPS acceleration.
+- Different environments require different approaches - some benefit from deep learning, others from simpler algorithms.
 
 **Dependencies:**
-- Key dependencies are managed within `GymnasiumVENV/`. A `requirements.txt` file might exist or could be generated to list specific package versions.
-- Common dependencies include:
-    - `gymnasium`
-    - `numpy`
-    - `matplotlib`
-    - Potentially specific RL framework libraries.
+- Dependencies are managed via `requirements.txt`
+- Core dependencies include:
+  - `gymnasium==1.1.1`
+  - `torch==2.7.0`
+  - `numpy==1.25.2`
+  - `matplotlib==3.10.3`
+  - `box2d-py==2.3.8` (for BipedalWalker, LunarLander)
+  - `ale-py>=0.8.0` (for Atari environments like Freeway)
+  - `opencv-python>=4.5.0` (for image preprocessing)
 
 **Tool Usage Patterns:**
 - **Cline:** Used as an AI software engineer, relying on the Memory Bank for context.
 - **VSCode:** Primary development environment.
 - **Terminal (within VSCode or standalone):** For running Python scripts, managing virtual environments, and Git operations.
+- **PyTorch with MPS:** For leveraging Apple Silicon GPU acceleration where possible, especially for training deep neural networks.
+- **Environment-Specific Tools:**
+  - Atari: Uses `ale-py` and frame preprocessing tools
+  - Box2D: Uses `box2d-py` for physics simulation

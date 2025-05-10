@@ -23,12 +23,23 @@ except ImportError:
     print("Warning: ale_py not found, Atari environments will not be available")
     print("Install with: pip install ale-py")
 
-# Create data directory if it doesn't exist
-os.makedirs("data/freeway", exist_ok=True)
+# Get project root directory (regardless of where script is executed from)
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
-# Set device for PyTorch
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"Using device: {device}")
+# Create data directory if it doesn't exist
+data_dir = os.path.join(project_root, "data", "freeway")
+os.makedirs(data_dir, exist_ok=True)
+
+# Set device for PyTorch with support for Apple M1 GPUs
+if torch.backends.mps.is_available():
+    device = torch.device("mps")  # Apple Silicon GPU
+    print(f"Using Apple Silicon GPU (MPS backend)")
+elif torch.cuda.is_available():
+    device = torch.device("cuda")
+    print(f"Using CUDA GPU")
+else:
+    device = torch.device("cpu")
+    print(f"Using CPU")
 
 class FrameSkip(gym.Wrapper):
     """
@@ -372,7 +383,7 @@ def train_agent(episodes=10000, render=True, load_checkpoint=False):
     
     # Load checkpoint if requested
     if load_checkpoint:
-        checkpoint_path = "data/freeway/freeway_double_dqn.pth"
+        checkpoint_path = os.path.join(data_dir, "freeway_double_dqn.pth")
         agent.load(checkpoint_path)
     
     # Training metrics
@@ -430,13 +441,16 @@ def train_agent(episodes=10000, render=True, load_checkpoint=False):
         # Save best model
         if episode_reward > best_reward:
             best_reward = episode_reward
-            agent.save("data/freeway/freeway_double_dqn_best.pth")
+            best_model_path = os.path.join(data_dir, "freeway_double_dqn_best.pth")
+            agent.save(best_model_path)
         
         # Save checkpoint periodically
         if episode % 50 == 0:
-            agent.save("data/freeway/freeway_double_dqn.pth")
+            checkpoint_path = os.path.join(data_dir, "freeway_double_dqn.pth")
+            agent.save(checkpoint_path)
             # Save training curves
-            plot_training_progress(episode_rewards, episode_lengths, episode_max_qs)
+            progress_path = os.path.join(data_dir, "training_progress_double_dqn.png")
+            plot_training_progress(episode_rewards, episode_lengths, episode_max_qs, progress_path)
         
         # Calculate elapsed time
         elapsed_time = time.time() - start_time
@@ -450,7 +464,7 @@ def train_agent(episodes=10000, render=True, load_checkpoint=False):
     return agent
 
 
-def plot_training_progress(rewards, lengths, max_qs):
+def plot_training_progress(rewards, lengths, max_qs, filepath):
     """Plot and save training progress curves."""
     plt.figure(figsize=(12, 10))
     
@@ -477,7 +491,7 @@ def plot_training_progress(rewards, lengths, max_qs):
     
     # Save figure
     plt.tight_layout()
-    plt.savefig('data/freeway/training_progress_double_dqn.png')
+    plt.savefig(filepath)
     plt.close()
 
 

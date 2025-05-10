@@ -1,14 +1,16 @@
 # Progress: Freeway Solutions
 
-**Overall Status (Freeway):** Initial implementation complete. Ready for training and evaluation.
+**Overall Status (Freeway):** Multiple implementations complete. Double DQN ready for training and evaluation.
 
 ## What Works (Freeway)
 
 - **Implementation Structure:**
-  - Core DQN agent implemented with experience replay and target network
+  - Two complete implementations: vanilla DQN and Double DQN
+  - Frame skipping in Double DQN implementation for efficient training
   - Custom environment wrappers for preprocessing and reward engineering
   - Training and evaluation functions with visualization support
-  - Checkpoint/resume functionality for model persistence
+  - Checkpoint/resume functionality for model persistence 
+  - Apple Silicon GPU acceleration via PyTorch MPS backend
 
 - **Environment Setup:**
   - Proper directory structure established
@@ -16,10 +18,10 @@
   - ROM compatibility check implemented
   - Full preprocessing pipeline functioning
 
-- **Neural Network Architecture:**
-  - 4 convolutional layers with appropriate filter sizes
-  - 3 fully connected layers with specified dimensions
-  - Network architecture compatible with 84x84x4 preprocessed input
+- **Neural Network Architectures:**
+  - DQN: 4 convolutional layers with appropriate filter sizes
+  - Double DQN: Standard 3-layer CNN architecture from DeepMind papers
+  - Optimized network parameters for fast training
 
 - **Reward Engineering:**
   - Zone-based progress rewards for upward movement
@@ -32,9 +34,10 @@
   - Plot generation for tracking metrics
   - Model saving for checkpoints and best performers
   - Interactive training/evaluation options
+  - Hardware acceleration detection and utilization
 
 - **Memory Bank Documentation:**
-  - Comprehensive documentation of the implementation
+  - Comprehensive documentation of both implementations
   - Detailed approach descriptions
   - System architecture and patterns documentation
   - Technical context and requirements specified
@@ -44,6 +47,7 @@
 - **Training and Tuning:**
   - Complete full training runs
   - Evaluate agent performance
+  - Compare DQN vs Double DQN performance
   - Fine-tune reward engineering parameters if needed
 
 - **Performance Documentation:**
@@ -53,20 +57,24 @@
 
 - **Potential Enhancements:**
   - Implement prioritized experience replay
-  - Explore alternative architectures
+  - Implement Dueling DQN architecture
+  - Rainbow DQN with multiple improvements combined
   - Add additional evaluation metrics
 
 ## Current Status of Implementation
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| Core Agent | Complete | DQN with experience replay and target network |
+| Basic DQN Agent | Complete | Initial implementation with custom rewards |
+| Double DQN Agent | Complete | Advanced implementation with frame skipping |
 | Preprocessing | Complete | Grayscale, resize, frame stacking, normalization |
+| Frame Skipping | Complete | Standard 4-frame action repeat with max pooling |
 | Reward Engineering | Complete | Multiple reward components implemented |
-| Neural Network | Complete | 4-layer CNN + 3-layer FC as specified |
+| Neural Networks | Complete | Standard architectures for both implementations |
+| Hardware Acceleration | Complete | MPS backend for Apple Silicon GPUs |
 | Training Loop | Complete | With checkpoint saving and plotting |
 | Evaluation | Complete | Separate function with exploration disabled |
-| Documentation | Complete | All Memory Bank files created |
+| Documentation | Complete | All Memory Bank files updated |
 | Training Results | Not Started | Awaiting training runs |
 
 ## Known Issues (Freeway Solution)
@@ -79,9 +87,10 @@
 - **Performance Unknowns:**
   - Reward engineering parameters may need adjustment based on learning performance
   - Optimal exploration rate decay needs validation through training
+  - Hardware acceleration benefits need measurement
 
 - **RAM Address Variations:**
-  - Implemented robust player position tracking using RAM address 0x86
+  - Implemented robust player position tracking using appropriate RAM addresses
   - Added diagnostic information, fallback mechanisms, and error handling
   - Displays RAM analysis on initialization to help identify correct addresses
 
@@ -93,18 +102,23 @@
   - Basic reward engineering components identified
 
 - **Architecture Decisions:**
-  - Added fourth convolutional layer for additional pattern recognition
-  - Used 3 fully connected layers for better representation
+  - Started with 4-layer CNN architecture for initial testing
+  - Moved to standard 3-layer CNN for Double DQN based on literature
   - RAM-based position tracking chosen for reward engineering
+
+- **Algorithm Improvements:**
+  - Moved from vanilla DQN to Double DQN to address overestimation bias
+  - Added frame skipping to improve training efficiency
+  - Implemented optimized hyperparameters based on Atari research
+
+- **Hardware Acceleration:**
+  - Added support for Apple Silicon GPUs using PyTorch MPS backend
+  - Dynamic device selection for various hardware configurations
+  - Optimized network architecture for GPU acceleration
 
 - **Robustness Improvements:**
   - Added defensive programming for RAM address access
   - Implemented diagnostic RAM analysis during initialization
   - Created fallback mechanisms for position tracking
-
-- **Memory Bank Setup:**
-  - Followed project standards for documentation
-  - Created comprehensive documentation of implementation details
-  - Established framework for tracking training progress
 
 This environment implementation is structured according to the project's best practices and is ready for training. Future updates to this progress file will track training results and any tuning or modifications made based on performance observations.

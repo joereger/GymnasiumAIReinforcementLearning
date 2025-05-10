@@ -1,8 +1,11 @@
 import gymnasium as gym
 import os
 
+# Get project root directory (regardless of where script is executed from)
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
 # Constants
-DATA_DIR = 'data/mountain_car/'
+DATA_DIR = os.path.join(project_root, 'data', 'mountain_car')
 
 # Ensure data directory exists
 os.makedirs(DATA_DIR, exist_ok=True)

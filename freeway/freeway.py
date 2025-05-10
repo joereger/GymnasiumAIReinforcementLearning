@@ -23,8 +23,12 @@ except ImportError:
     print("Warning: ale_py not found, Atari environments will not be available")
     print("Install with: pip install ale-py")
 
+# Get project root directory (regardless of where script is executed from)
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
 # Create data directory if it doesn't exist
-os.makedirs("data/freeway", exist_ok=True)
+data_dir = os.path.join(project_root, "data", "freeway")
+os.makedirs(data_dir, exist_ok=True)
 
 # Set device for PyTorch
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -478,7 +482,7 @@ def train_agent(episodes=10000, render=True, load_checkpoint=False):
     
     # Load checkpoint if requested
     if load_checkpoint:
-        checkpoint_path = "data/freeway/freeway_dqn.pth"
+        checkpoint_path = os.path.join(data_dir, "freeway_dqn.pth")
         agent.load(checkpoint_path)
     
     # Training metrics
@@ -540,11 +544,13 @@ def train_agent(episodes=10000, render=True, load_checkpoint=False):
         # Save best model
         if episode_reward > best_reward:
             best_reward = episode_reward
-            agent.save("data/freeway/freeway_dqn_best.pth")
+            best_model_path = os.path.join(data_dir, "freeway_dqn_best.pth")
+            agent.save(best_model_path)
         
         # Save checkpoint periodically
         if episode % 100 == 0:
-            agent.save("data/freeway/freeway_dqn.pth")
+            checkpoint_path = os.path.join(data_dir, "freeway_dqn.pth")
+            agent.save(checkpoint_path)
         
         # Calculate elapsed time
         elapsed_time = time.time() - start_time
@@ -589,7 +595,8 @@ def plot_training_progress(rewards, lengths, max_qs):
     
     # Save figure
     plt.tight_layout()
-    plt.savefig('data/freeway/training_progress.png')
+    progress_path = os.path.join(data_dir, "training_progress.png")
+    plt.savefig(progress_path)
     plt.close()
 
 
@@ -621,7 +628,8 @@ def evaluate_agent(episodes=10, render=True):
     agent = DQNAgent(state_shape, n_actions)
     
     # Load best model
-    agent.load("data/freeway/freeway_dqn_best.pth")
+    best_model_path = os.path.join(data_dir, "freeway_dqn_best.pth")
+    agent.load(best_model_path)
     agent.epsilon = 0.0  # No exploration during evaluation
     
     # Evaluation metrics

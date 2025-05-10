@@ -242,9 +242,13 @@ def evaluate(agent, env, num_episodes=10):
 #env = gym.make("BipedalWalker-v3", render_mode="human")
 env = gym.make("BipedalWalker-v3")
 
+# Get project root directory (regardless of where script is executed from)
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
 # Constants
 num_episodes = 1000
-PATH = 'data/'
+PATH = os.path.join(project_root, "data", "bipedal_walker") + "/"
+os.makedirs(PATH, exist_ok=True)  # Ensure directory exists
 PREFIX = 'bipedal_walker_v04'
 
 # Initialize the PPOAgent

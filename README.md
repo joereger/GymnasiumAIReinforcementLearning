@@ -2,6 +2,23 @@
 
 This repository contains a collection of experiments and solutions for various reinforcement learning problems using the [Gymnasium](https://gymnasium.farama.org/) library by the Farama Foundation. The primary goal is personal learning and exploration of different RL algorithms and techniques.
 
+## Recent Results: Freeway with Double DQN
+
+![Freeway Game Screenshot](assets/freeway_screenshot.png)
+
+After implementing the Double DQN algorithm for the Atari Freeway environment with frame skipping and MPS acceleration on Apple Silicon, the agent was trained overnight with impressive results:
+
+![Freeway Training Progress](assets/freeway_training_progress_double_dqn.png)
+
+**Training Summary:**
+- **Initial Performance**: The agent started with scores of 0-2 points, mostly choosing random actions
+- **Middle Training**: By episodes 150-200, consistent improvement with scores averaging 2-4 points
+- **Final Performance**: Episodes 280-310 show significant learning with scores consistently reaching 4-6 points and occasional peaks of 8-10 points
+- **Max Q-Values**: Steady increase from near 0 to 0.5+, indicating the agent is developing accurate value estimates
+- **Notable Achievements**: The agent achieved a high score of 10+ in later episodes, showing it learned to navigate traffic effectively
+
+The upward trend in rewards and steadily increasing Q-values demonstrate the effectiveness of the Double DQN architecture with frame skipping over standard DQN for this environment.
+
 ## Project Structure
 
 The project is organized with a dedicated folder for each Gymnasium environment being tackled. Each environment's folder aims to be self-contained, including all solution scripts and necessary utility files.
@@ -62,7 +79,7 @@ Here's a high-level overview of environments and the corresponding solution file
 
 ## How to Run Experiments
 
-Each environment's solution script can typically be run directly from its respective folder.
+Each environment's solution script can typically be run directly from its respective folder or from any location.
 
 For example, to run a Bipedal Walker experiment:
 ```bash
@@ -76,7 +93,9 @@ cd cart_pole
 python cart_pole.py
 ```
 
-Ensure your virtual environment is activated before running the scripts. Some scripts might save models or logs to the `data/` directory or subdirectories within their environment folder.
+All scripts implement absolute path resolution, ensuring that data files are always saved in the correct `/data/<environment_name>/` directory, regardless of where the script is executed from. This allows you to run scripts from any location without worrying about relative path issues.
+
+Ensure your virtual environment is activated before running the scripts. Models, checkpoints, and visualizations will be stored in the project's main `data/` directory structure.
 
 ## Gymnasium Version
 

@@ -1,57 +1,69 @@
-# Active Context: Pong (`ALE/PongNoFrameskip-v4`)
+# Active Context: Pong (`PongNoFrameskip-v4`)
 
-**Current Task:** Experimenting with DQN hyperparameters and enhancements to achieve learning in the Pong environment.
+**Current Task:** Implementing Double DQN to address Q-value collapse in the initial DQN implementation.
 
-**Phase:** Code Refactoring and Continuing Experiment 1
+**Phase:** Experiment 2 - Double DQN Implementation
 
 **Recent Actions & State:**
-1. **Code Refactoring:**
-   * Refactored the monolithic `pong/pong_dqn.py` into a more modular structure:
-     * `pong_dqn.py` - Clean main entry point with dependency checking
-     * `pong_dqn_utils.py` - Preprocessing, frame stacking, replay buffer
-     * `pong_dqn_model.py` - DQN network architecture and agent implementation
-     * `pong_dqn_vis.py` - Visualization with multi-axis plotting
-     * `pong_dqn_train.py` - Training and evaluation logic
-   * This modular approach improves maintainability and readability
-   * All functionality has been preserved from the original implementation
+1. **Code Modularization:**
+   * Refactored the original monolithic `pong_dqn.py` into a modular structure:
+     * `pong_dqn.py` - Main entry point
+     * `pong_dqn_utils.py` - Preprocessing and utilities
+     * `pong_dqn_model.py` - DQN network and agent
+     * `pong_dqn_vis.py` - Visualization
+     * `pong_dqn_train.py` - Training and evaluation
 
-2. **Previous Enhancements (Maintained):**
-   * **Reward Clipping:** Rewards stored in the replay buffer are clipped to `np.sign(reward)`.
-   * **Replay Buffer Warmup:** Added a 50,000-step warmup phase.
-   * **Gradient Clipping:** Enabled gradient norm clipping at 1.0 in `agent.learn()`.
-   * **Corrected `agent.current_frames` Resumption:** Ensured `agent.current_frames` is properly restored from stats when loading a checkpoint.
-   * **Corrected Environment ID:** Using `PongNoFrameskip-v4`.
-   * **Corrected Warmup Seeding:** Ensured positive seeds during warmup resets.
+2. **Experiment 1 Results Analysis:**
+   * Ran the DQN implementation for ~50 episodes (180K steps)
+   * Observed persistent stagnation with rewards between -21 and -19
+   * Most concerning: **Q-value collapse** from ~0.053 to negative values
+   * Loss remained stable (~0.006) despite declining Q-values
+   * No improvement in evaluation performance (consistently -21 score)
+   * These issues suggest potential overestimation bias and learning instability
 
-3. **Enhanced Logging & Plotting (Improved):**
-   * Maintained logging for average max Q-value and average loss per episode
-   * Enhanced plotting function with multi-axis display in `pong_dqn_vis.py`
-
-4. **Experiment 1 Settings (Unchanged):**
-   * **Learning Rate:** `2.5e-4` (original default)
-   * **Target Network Update Frequency:** `10,000` steps
-   * All other enhancements (reward clipping, 50k warmup, gradient clipping, robust stats) are active.
+3. **Double DQN Implementation (Experiment 2):**
+   * Created a new set of files with Double DQN implementation:
+     * `pong_double_dqn.py`
+     * `pong_double_dqn_utils.py`
+     * `pong_double_dqn_model.py`
+     * `pong_double_dqn_vis.py`
+     * `pong_double_dqn_train.py`
+   * **Key Algorithm Change:** Decoupled action selection and evaluation
+     * Using online network to select actions: `best_action = argmax(Q_online(next_state))`
+     * Using target network to evaluate actions: `target_q = reward + gamma * Q_target(next_state, best_action)`
+   * **Hyperparameter Changes:**
+     * Learning rate: Reduced to `1e-5` (from `2.5e-4`)
+     * Target network updates: More frequent at every `1,000` steps (from `10,000`)
+     * Replay buffer size: Increased to `500K` (from `100K`)
+     * Epsilon decay: Slower over `2M` frames (from `1M`)
+   * **Enhanced Visualization:** Added experiment information to plots, improved metrics display
 
 **Next Steps:**
-1. Execute a **fresh training run** with the refactored code but maintaining Experiment 1 settings (LR `2.5e-4`, Target Update `10k` steps).
-   * Ensure previous `data/pong/pong_training_stats.json` and model files are cleared or that "load checkpoint" is answered with 'n' to avoid contamination.
+1. **Run Experiment 2:**
+   * Execute a fresh training run with the Double DQN implementation
+   * Monitor Q-values closely to check if the collapse issue is addressed
+   * Pay attention to reward trends, especially evaluation scores
+   * Allow sufficient training time (1-2M frames) to assess long-term learning trends
 
-2. Monitor training progress closely, paying attention to:
-   * 100-episode average reward.
-   * **Evaluation scores (every 10 episodes).** This is the most critical indicator.
-   * Average max Q-values per episode (should ideally trend upwards if value estimation is improving).
-   * Average loss per episode (should ideally decrease and stabilize).
+2. **Analysis:**
+   * Compare Double DQN performance to original DQN implementation
+   * Look for stability in Q-values (no collapse) and gradual improvement in rewards
+   * Document the impact of each hyperparameter change
 
-3. Run for a significant number of frames (1M to 2M) to give the settings a fair chance.
-
-4. Analyze the results of Experiment 1 to determine if these changes have led to any improvement in learning.
-
-5. If needed, implement Experiment 2 with adjusted hyperparameters based on Experiment 1 results.
+3. **Future Considerations:**
+   * If Double DQN shows promise but still struggles, consider:
+     * Prioritized Experience Replay
+     * Dueling DQN architecture
+     * Further hyperparameter adjustments
+   * If Double DQN fails completely, investigate more fundamental issues:
+     * State representation (possibly RAM-based state)
+     * Reward structure (potential reward shaping)
+     * Network architecture changes
 
 **Open Questions/Decisions:**
-- Will the refactored code structure maintain the same performance characteristics as the original?
-- Will the increased target network update frequency, combined with the original learning rate and other enhancements, be sufficient to break the learning stagnation?
-- If Experiment 1 fails, what will be the next set of hyperparameters or structural changes to investigate (e.g., even lower learning rate with slow target updates, different optimizer, or considering RAM-based state)?
+- Will Double DQN address the Q-value collapse observed in the original implementation?
+- Which hyperparameter change will have the biggest impact: learning rate, target update frequency, or replay buffer size?
+- Is the main issue overestimation bias (which Double DQN addresses) or something more fundamental?
 
 **Focus:** 
-Running Experiment 1 with the newly refactored code to verify both the code integrity and the effectiveness of the hyperparameter settings in learning the Pong environment.
+Determining if Double DQN with adjusted hyperparameters can overcome the learning stagnation observed in the vanilla DQN implementation.

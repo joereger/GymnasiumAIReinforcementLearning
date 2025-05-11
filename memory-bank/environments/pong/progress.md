@@ -1,31 +1,32 @@
-# Progress: Pong (`ALE/PongNoFrameskip-v4`)
+# Progress: Pong (`PongNoFrameskip-v4`)
 
-**Overall Status:** DQN agent implemented and refactored into modular structure. Initial training runs showed stagnation. Now proceeding with "Experiment 1" using the refactored codebase with adjusted hyperparameters and enhanced logging.
+**Overall Status:** DQN agent (Experiment 1) showed Q-value collapse. Double DQN (Experiment 2) implemented to address this issue.
 
-**Current Phase:** Code Refactoring and Continuing Experiment 1
+**Current Phase:** Experiment 2 - Double DQN Implementation
 
 **Completed Steps:**
 1.  **Initial Setup:**
     *   Directory structure (`pong/`, `data/pong/`, `memory-bank/environments/pong/`) created.
     *   Initial Pong-specific Memory Bank files populated.
-2.  **Original `pong/pong_dqn.py` Implementation:**
+
+2.  **Original `pong/pong_dqn.py` Implementation (Experiment 1):**
     *   Core DQN components implemented: `preprocess`, `FrameStack`, `PongDQN` model, `ReplayBuffer`, `DQNAgent`.
     *   Training loop, evaluation, plotting, and command-line interaction for train/evaluate choices.
     *   Robust JSON-based statistics saving/loading for resumable training and charts.
     *   Seed correction for warmup.
     *   Environment ID corrected to `PongNoFrameskip-v4`.
+
 3.  **"High-Impact Fixes" Implemented:**
     *   Reward Clipping (`np.sign(reward)`).
     *   Replay Buffer Warmup (50,000 steps).
     *   Gradient Clipping (norm 1.0).
     *   Ensured `agent.current_frames` is correctly restored when resuming training.
+
 4.  **Enhanced Logging & Plotting:**
     *   Added collection and logging of average max Q-value and average loss per episode.
     *   Plotting function updated to display these new metrics.
-5.  **Initial Training Runs & Observation:**
-    *   Run 1 (LR `2.5e-4`, Target Update `1k` steps): ~1.2M steps, ~9 hours. Result: Stagnation, avg reward ~-20.5, eval score -21.
-    *   Run 2 (LR `1e-4`, Target Update `1k` steps): ~500 episodes, ~1.7M total steps from combined runs. Result: Continued stagnation, avg reward trended slightly worse to ~-20.6, eval score -21.
-6.  **Code Refactoring:**
+
+5.  **Code Refactoring:**
     *   Refactored the monolithic `pong/pong_dqn.py` into a more maintainable modular structure:
         *   `pong_dqn.py` - Main entry point with dependency checking and user interface
         *   `pong_dqn_utils.py` - Preprocessing, frame stacking, replay buffer
@@ -35,26 +36,58 @@
     *   All functionality preserved while improving code maintainability and readability
     *   Updated Memory Bank documentation to reflect the new structure
 
-**What's Working:**
--   The DQN implementation runs, trains, saves/loads checkpoints and stats, and generates multi-panel plots.
--   The modular code structure improves maintainability and organization.
--   The core DQN architecture and training enhancements (clipping, warmup) are in place.
+6.  **Experiment 1 Results Analysis:**
+    *   Ran the DQN implementation for ~50 episodes (180K steps)
+    *   Discovered concerning Q-value collapse: values steadily declined from ~0.053 to negative values
+    *   Rewards stagnated between -21 and -19, with no improvement trend
+    *   Loss remained stable around 0.006 throughout training
+    *   No improvement in evaluation performance (consistently -21 score)
+    *   Identified potential overestimation bias as a major contributor to learning issues
 
-**What's Next (Experiment 1 with Refactored Code):**
-1.  **Execute Fresh Training Run for Experiment 1:**
-    *   **Learning Rate:** `2.5e-4`.
-    *   **Target Network Update Frequency:** `10,000` steps.
-    *   All other enhancements (reward clipping, 50k warmup, gradient clipping, robust stats, new logging) active.
-    *   Ensure previous stats/models are cleared or not loaded to start fresh.
-2.  **Monitor Closely:** Observe 100-episode average reward, evaluation scores, average max Q-values, and average loss.
-3.  **Analyze Results:** Determine if the increased target update frequency leads to improved learning stability and performance.
-4.  **Documentation:** Update this `progress.md` and other Memory Bank files with the outcomes of Experiment 1.
-5.  **Further Iteration:** Based on Experiment 1 results, decide on subsequent hyperparameter adjustments or other diagnostic steps if stagnation persists.
+7.  **Double DQN Implementation (Experiment 2):**
+    *   Created new set of files for Double DQN implementation:
+        *   `pong_double_dqn.py` - Main Double DQN entry point
+        *   `pong_double_dqn_utils.py` - Utilities (buffer size increased to 500K)
+        *   `pong_double_dqn_model.py` - Double DQN algorithm implementation
+        *   `pong_double_dqn_vis.py` - Enhanced visualization with experiment details
+        *   `pong_double_dqn_train.py` - Modified training loop for Double DQN
+    *   Implemented key algorithmic change: decoupling action selection (using online network) from action evaluation (using target network)
+    *   Updated hyperparameters:
+        *   Learning rate: Reduced to `1e-5` (from `2.5e-4`)
+        *   Target network updates: More frequent at every `1,000` steps (from `10,000`)
+        *   Replay buffer size: Increased to `500K` (from `100K`)
+        *   Epsilon decay: Slower over `2M` frames (from `1M`)
+    *   Improved training stats to include experiment version and hyperparameters
+    *   Added experiment details to visualization
+
+**What's Working:**
+-   The codebase is now more maintainable with a modular structure
+-   Comprehensive logging and visualization provides clear insights into training dynamics
+-   Double DQN implementation follows research best practices for addressing Q-value overestimation
+-   All training/evaluation functionality for both DQN and Double DQN is working correctly
+
+**What's Next (Experiment 2):**
+1.  **Execute Training Run with Double DQN:**
+    *   Run the `pong_double_dqn.py` implementation for a significant number of frames (1-2M)
+    *   Monitor Q-values to check if the collapse issue is addressed
+    *   Track reward trends, especially evaluation scores
+    *   Periodically check the plots to assess learning progress
+
+2.  **Results Analysis:**
+    *   Compare Double DQN to the original DQN implementation
+    *   Assess impact of each hyperparameter change
+    *   Document findings in Memory Bank
+
+3.  **Next Steps After Experiment 2:**
+    *   If Double DQN shows promise: pursue further enhancements (Prioritized Experience Replay, Dueling DQN)
+    *   If Double DQN still struggles: investigate more fundamental issues (state representation, reward structure)
+    *   Update the Memory Bank with new findings and next experiment plans
 
 **Known Issues/Challenges:**
--   **Persistent Learning Stagnation:** The primary challenge is that the agent has not shown significant learning despite extensive training and initial hyperparameter tweaks. Evaluation scores remain at the minimum (-21).
--   Identifying the root cause of non-learning (hyperparameters, subtle bug, exploration issues) is the main focus.
--   **Code Complexity:** The previous monolithic implementation became unwieldy, leading to potential errors. The new modular structure should address this, but we'll need to verify that performance is not impacted.
+-   **Q-value Collapse in Original DQN:** The most critical issue in Experiment 1, with Q-values steadily declining to negative values
+-   **Learning Stagnation:** Despite extensive training, the original DQN showed no improvement in rewards
+-   **Fundamental Learning Dynamics:** Even with reward clipping, proper warmup, and gradient clipping, the learning dynamics appear unstable
 
-**Timeline Estimation (Rough for Experiment 1):**
--   Another significant training run (e.g., 1M-2M frames / ~10-20 hours) will be needed to assess the impact of the new target update frequency and verify the refactored code performs as expected.
+**Timeline Estimation:**
+-   Double DQN training run will likely require 1-2M frames (~10-20 hours) to show meaningful trends
+-   Given the slower epsilon decay (2M frames), learning progress may be more gradual but potentially more stable

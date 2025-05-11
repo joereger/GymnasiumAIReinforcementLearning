@@ -154,18 +154,55 @@ class DQNAgent:
         self.target_net.load_state_dict(self.policy_net.state_dict()) # Ensure target net is also updated
 
 # --- Plotting ---
-def plot_rewards(rewards, avg_rewards, filename="pong_rewards.png"):
-    plt.figure(figsize=(12, 6))
-    plt.plot(rewards, label='Episode Reward')
-    plt.plot(avg_rewards, label='Avg Reward (Last 100 episodes)', color='red')
-    plt.xlabel('Episode')
-    plt.ylabel('Reward')
-    plt.title('Pong DQN Training Rewards')
-    plt.legend()
-    plt.grid(True)
+def plot_training_data(episode_stats, filename="pong_training_progress.png"):
+    if not episode_stats:
+        print("No stats to plot.")
+        return
+
+    rewards = [e['reward'] for e in episode_stats]
+    avg_rewards = [np.mean(rewards[max(0,i-99):i+1]) for i in range(len(rewards))]
+    
+    num_plots = 1
+    if 'avg_max_q' in episode_stats[0]:
+        num_plots += 1
+    if 'avg_loss' in episode_stats[0]:
+        num_plots += 1
+
+    fig, axs = plt.subplots(num_plots, 1, figsize=(12, 6 * num_plots), sharex=True)
+    if num_plots == 1: # If only rewards, axs is not a list
+        axs = [axs] 
+
+    # Plot Rewards
+    axs[0].plot(rewards, label='Episode Reward', alpha=0.7)
+    axs[0].plot(avg_rewards, label='Avg Reward (Last 100 episodes)', color='red', linewidth=2)
+    axs[0].set_ylabel('Reward')
+    axs[0].set_title('Pong DQN Training Progress')
+    axs[0].legend()
+    axs[0].grid(True)
+
+    current_ax = 1
+    if 'avg_max_q' in episode_stats[0]:
+        avg_max_q_values = [e.get('avg_max_q', np.nan) for e in episode_stats] # Use np.nan for missing
+        axs[current_ax].plot(avg_max_q_values, label='Avg Max Q-Value per Episode', color='green')
+        axs[current_ax].set_ylabel('Avg Max Q')
+        axs[current_ax].legend()
+        axs[current_ax].grid(True)
+        current_ax += 1
+
+    if 'avg_loss' in episode_stats[0]:
+        avg_loss_values = [e.get('avg_loss', np.nan) for e in episode_stats] # Use np.nan for missing
+        axs[current_ax].plot(avg_loss_values, label='Avg Loss per Episode', color='purple')
+        axs[current_ax].set_ylabel('Avg Loss')
+        axs[current_ax].legend()
+        axs[current_ax].grid(True)
+
+    axs[-1].set_xlabel('Episode') # Set x-label only on the bottom plot
+    
+    plt.tight_layout()
     plt.savefig(filename)
     plt.close()
     print(f"Plot saved to {filename}")
+
 
 # --- Helper to format time ---
 def format_time(seconds):
@@ -239,14 +276,14 @@ def evaluate_pong_agent(env_name, model_path_to_load, num_episodes=10, human_ren
 def train_pong_agent(human_render_during_training=False, load_checkpoint_flag=False):
     # Hyperparameters from "Smart Defaults"
     ENV_NAME = "PongNoFrameskip-v4"
-    train_render_mode = "human" if human_render_during_training else None # Use None if not human rendering
-    LEARNING_RATE = 1e-4 # Changed from 2.5e-4
-    BATCH_SIZE = 32 # Defined inside train_pong_agent
-    REPLAY_BUFFER_SIZE = int(1e5) # Defined inside train_pong_agent
-    GAMMA = 0.99 # Defined inside train_pong_agent
-    TARGET_UPDATE_FREQ = 1000 # Agent steps, defined inside train_pong_agent
-    EPSILON_START = 1.0 # Defined inside train_pong_agent
-    EPSILON_END = 0.01 # Defined inside train_pong_agent
+    train_render_mode = "human" if human_render_during_training else None
+    LEARNING_RATE = 2.5e-4 # Reverted for Experiment 1
+    BATCH_SIZE = 32
+    REPLAY_BUFFER_SIZE = int(1e5)
+    GAMMA = 0.99
+    TARGET_UPDATE_FREQ = 10000 # Changed for Experiment 1 (from 1000)
+    EPSILON_START = 1.0
+    EPSILON_END = 0.01
     EPSILON_DECAY_FRAMES = int(1e6)
 
     MAX_EPISODES = 5000
@@ -281,20 +318,20 @@ def train_pong_agent(human_render_during_training=False, load_checkpoint_flag=Fa
     # Initialize FrameStacker and Agent
     frame_stacker = FrameStack(k=FRAMES_PER_STATE) # Defined inside train_pong_agent
     # Initial observation to get state shape
-    temp_obs, _ = env.reset(seed=SEED) # Defined inside train_pong_agent
-    temp_state = frame_stacker.reset(temp_obs) # Defined inside train_pong_agent
-    STATE_SHAPE = temp_state.shape # Defined inside train_pong_agent
+    temp_obs, _ = env.reset(seed=SEED)
+    temp_state = frame_stacker.reset(temp_obs)
+    STATE_SHAPE = temp_state.shape
 
-    agent = DQNAgent( # Defined inside train_pong_agent
-        state_shape=STATE_SHAPE, # Defined inside train_pong_agent
-        action_space=ACTION_SPACE_SIZE, # Defined inside train_pong_agent
-        lr=LEARNING_RATE, # Defined inside train_pong_agent
-        gamma=GAMMA, # Defined inside train_pong_agent
-        target_update_freq=TARGET_UPDATE_FREQ, # Defined inside train_pong_agent
-        epsilon_start=EPSILON_START, # Defined inside train_pong_agent
-        epsilon_end=EPSILON_END, # Defined inside train_pong_agent
-        epsilon_decay_frames=EPSILON_DECAY_FRAMES, # Defined inside train_pong_agent
-        batch_size=BATCH_SIZE # Defined inside train_pong_agent
+    agent = DQNAgent(
+        state_shape=STATE_SHAPE,
+        action_space=ACTION_SPACE_SIZE,
+        lr=LEARNING_RATE,
+        gamma=GAMMA,
+        target_update_freq=TARGET_UPDATE_FREQ, # Using updated value
+        epsilon_start=EPSILON_START,
+        epsilon_end=EPSILON_END,
+        epsilon_decay_frames=EPSILON_DECAY_FRAMES,
+        batch_size=BATCH_SIZE
     )
     
     if load_checkpoint_flag and os.path.exists(MODEL_PATH):
@@ -381,10 +418,18 @@ def train_pong_agent(human_render_during_training=False, load_checkpoint_flag=Fa
         obs, info = env.reset(seed=SEED + episode_num)
         state = frame_stacker.reset(obs)
         done = False
-        current_episode_reward = 0 # Raw reward for this episode for logging
+        current_episode_reward = 0
         current_episode_steps = 0
+        episode_losses = []
+        episode_max_q_values = []
 
         while not done:
+            # Get Q-values for current state before action to log max Q
+            with torch.no_grad():
+                state_tensor_for_q = torch.FloatTensor(state).unsqueeze(0).to(device)
+                q_values_pred = agent.policy_net(state_tensor_for_q)
+                episode_max_q_values.append(q_values_pred.max().item())
+
             action = agent.act(state) # agent.current_frames is incremented here
             next_obs, reward, terminated, truncated, info = env.step(action)
             done = terminated or truncated
@@ -397,10 +442,12 @@ def train_pong_agent(human_render_during_training=False, load_checkpoint_flag=Fa
             replay_buffer.store((state, action, clipped_reward, next_state, float(done)))
 
             state = next_state
-            current_episode_reward += reward # Log raw reward
+            current_episode_reward += reward
             current_episode_steps += 1
             
-            loss = agent.learn(replay_buffer) # agent.current_frames is incremented inside act()
+            loss = agent.learn(replay_buffer)
+            if loss is not None:
+                episode_losses.append(loss)
 
             if agent.current_frames >= MAX_FRAMES_TOTAL:
                 print(f"Reached max total agent steps ({MAX_FRAMES_TOTAL}). Stopping training.")
@@ -420,17 +467,31 @@ def train_pong_agent(human_render_during_training=False, load_checkpoint_flag=Fa
         }
         all_episode_stats.append(episode_data)
         
-        # For plotting convenience
+        
+        avg_episode_loss = np.mean(episode_losses) if episode_losses else 0
+        avg_episode_max_q = np.mean(episode_max_q_values) if episode_max_q_values else 0
+
+        episode_data = {
+            "episode_number": episode_num,
+            "reward": current_episode_reward,
+            "steps": current_episode_steps,
+            "epsilon": agent.get_epsilon(),
+            "timestamp_end_episode": time.time(),
+            "duration_episode_seconds": episode_duration_seconds,
+            "avg_loss": avg_episode_loss,
+            "avg_max_q": avg_episode_max_q
+        }
+        all_episode_stats.append(episode_data)
+        
         rewards_for_plot = [e['reward'] for e in all_episode_stats]
         avg_reward_for_plot = np.mean(rewards_for_plot[-100:])
         
-        print(f"Episode: {episode_num}/{MAX_EPISODES} | Steps: {current_episode_steps} | Total Steps: {agent.current_frames} | Reward: {current_episode_reward:.2f} | Avg Reward (100ep): {avg_reward_for_plot:.2f} | Epsilon: {agent.get_epsilon():.4f} | Cum. Time: {format_time(total_cumulative_time_seconds)}")
+        print(f"Episode: {episode_num}/{MAX_EPISODES} | Steps: {current_episode_steps} | Total Steps: {agent.current_frames} | Reward: {current_episode_reward:.2f} | Avg Reward (100ep): {avg_reward_for_plot:.2f} | Epsilon: {agent.get_epsilon():.4f} | Avg Loss: {avg_episode_loss:.4f} | Avg Max Q: {avg_episode_max_q:.2f} | Cum. Time: {format_time(total_cumulative_time_seconds)}")
 
         if episode_num % EVAL_INTERVAL_EPISODES == 0:
             current_model_to_eval_path = BEST_MODEL_PATH if os.path.exists(BEST_MODEL_PATH) else MODEL_PATH
-            # Ensure a model is saved before first evaluation if no best model exists yet
             if not os.path.exists(current_model_to_eval_path) and episode_num >= SAVE_INTERVAL_EPISODES:
-                 agent.save(MODEL_PATH)
+                 agent.save(MODEL_PATH) # Save current agent's policy_net
                  current_model_to_eval_path = MODEL_PATH
             
             if os.path.exists(current_model_to_eval_path):
@@ -438,19 +499,17 @@ def train_pong_agent(human_render_during_training=False, load_checkpoint_flag=Fa
                  print(f"Evaluation after Episode {episode_num}: Avg Reward = {eval_reward_val:.2f}")
                  if eval_reward_val > best_eval_reward:
                       best_eval_reward = eval_reward_val
-                      agent.save(BEST_MODEL_PATH)
+                      agent.save(BEST_MODEL_PATH) # Save current agent's policy_net as best
                       print(f"New best evaluation reward: {best_eval_reward:.2f}. Best model saved to {BEST_MODEL_PATH}")
             else:
                  print(f"Skipping evaluation at episode {episode_num} as no model saved yet ({current_model_to_eval_path}).")
             
-            # Plotting uses rewards_for_plot and its derived avg_reward_for_plot
-            plot_rewards(rewards_for_plot, [np.mean(rewards_for_plot[max(0,i-99):i+1]) for i in range(len(rewards_for_plot))], filename=REWARDS_PLOT_PATH)
+            plot_training_data(all_episode_stats, filename=REWARDS_PLOT_PATH)
 
 
         if episode_num % SAVE_INTERVAL_EPISODES == 0:
             agent.save(MODEL_PATH)
             print(f"Model checkpoint saved at episode {episode_num} to {MODEL_PATH}")
-            # Save stats with checkpoint
             stats_to_save = {
                 "episode_stats": all_episode_stats,
                 "total_agent_steps_completed": agent.current_frames,
@@ -482,10 +541,9 @@ def train_pong_agent(human_render_during_training=False, load_checkpoint_flag=Fa
     print(f"Final model saved to {MODEL_PATH}")
     print(f"Final training stats saved to {STATS_PATH}")
     
-    final_rewards_for_plot = [e['reward'] for e in all_episode_stats]
-    final_avg_rewards_for_plot = [np.mean(final_rewards_for_plot[max(0,i-99):i+1]) for i in range(len(final_rewards_for_plot))]
-    plot_rewards(final_rewards_for_plot, final_avg_rewards_for_plot, filename=REWARDS_PLOT_PATH)
-    print(f"Final rewards plot saved to {REWARDS_PLOT_PATH}")
+    
+    plot_training_data(all_episode_stats, filename=REWARDS_PLOT_PATH)
+    print(f"Final plot saved to {REWARDS_PLOT_PATH}")
     return agent
 
 

@@ -1,6 +1,6 @@
 # Environment Brief: Pong
 
-**Environment Name:** `ALE/PongNoFrameskip-v4`
+**Environment Name:** `PongNoFrameskip-v4`
 
 **Source:** OpenAI Gymnasium (via `ale-py` for Atari Learning Environment)
 
@@ -16,9 +16,9 @@ Pong is a classic two-dimensional sports game simulating table tennis. Each play
     - 0 for all other time steps.
 - **Episode Termination:** An episode ends when one player reaches 21 points.
 
-**Chosen Variant:** `ALE/PongNoFrameskip-v4`
+**Chosen Variant:** `PongNoFrameskip-v4`
 - **Reasoning:** This variant is standard for DQN research. It provides direct control over frame skipping and stacking, which will be handled by the agent's preprocessing logic.
-- **Instantiation:** `env = gym.make("ALE/PongNoFrameskip-v4", repeat_action_probability=0.0)` (Note: `repeat_action_probability` is often set to 0 or a low value when manual frame skipping is implemented, but the default for Atari environments in Gymnasium might handle this. The user specifically provided 0.0).
+- **Instantiation:** `env = gym.make("PongNoFrameskip-v4", repeat_action_probability=0.0)` (Note: `repeat_action_probability` is set to 0.0 to ensure deterministic action execution without random sticky actions).
 
 **Objective:**
 Train an agent to play Pong effectively, maximizing its score against the built-in opponent.

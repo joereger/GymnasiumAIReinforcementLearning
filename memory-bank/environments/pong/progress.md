@@ -1,14 +1,14 @@
 # Progress: Pong (`ALE/PongNoFrameskip-v4`)
 
-**Overall Status:** DQN agent implemented. Initial training runs showed stagnation. Currently preparing for "Experiment 1" with adjusted hyperparameters and enhanced logging.
+**Overall Status:** DQN agent implemented and refactored into modular structure. Initial training runs showed stagnation. Now proceeding with "Experiment 1" using the refactored codebase with adjusted hyperparameters and enhanced logging.
 
-**Current Phase:** Iterative Tuning and Observation.
+**Current Phase:** Code Refactoring and Continuing Experiment 1
 
 **Completed Steps:**
 1.  **Initial Setup:**
     *   Directory structure (`pong/`, `data/pong/`, `memory-bank/environments/pong/`) created.
     *   Initial Pong-specific Memory Bank files populated.
-2.  **`pong/pong_dqn.py` Implementation:**
+2.  **Original `pong/pong_dqn.py` Implementation:**
     *   Core DQN components implemented: `preprocess`, `FrameStack`, `PongDQN` model, `ReplayBuffer`, `DQNAgent`.
     *   Training loop, evaluation, plotting, and command-line interaction for train/evaluate choices.
     *   Robust JSON-based statistics saving/loading for resumable training and charts.
@@ -25,12 +25,22 @@
 5.  **Initial Training Runs & Observation:**
     *   Run 1 (LR `2.5e-4`, Target Update `1k` steps): ~1.2M steps, ~9 hours. Result: Stagnation, avg reward ~-20.5, eval score -21.
     *   Run 2 (LR `1e-4`, Target Update `1k` steps): ~500 episodes, ~1.7M total steps from combined runs. Result: Continued stagnation, avg reward trended slightly worse to ~-20.6, eval score -21.
+6.  **Code Refactoring:**
+    *   Refactored the monolithic `pong/pong_dqn.py` into a more maintainable modular structure:
+        *   `pong_dqn.py` - Main entry point with dependency checking and user interface
+        *   `pong_dqn_utils.py` - Preprocessing, frame stacking, replay buffer
+        *   `pong_dqn_model.py` - DQN network architecture and agent implementation
+        *   `pong_dqn_vis.py` - Visualization and multi-axis plotting
+        *   `pong_dqn_train.py` - Training and evaluation logic
+    *   All functionality preserved while improving code maintainability and readability
+    *   Updated Memory Bank documentation to reflect the new structure
 
 **What's Working:**
--   The `pong_dqn.py` script runs, trains, saves/loads checkpoints and stats, and generates multi-panel plots.
+-   The DQN implementation runs, trains, saves/loads checkpoints and stats, and generates multi-panel plots.
+-   The modular code structure improves maintainability and organization.
 -   The core DQN architecture and training enhancements (clipping, warmup) are in place.
 
-**What's Next (Experiment 1):**
+**What's Next (Experiment 1 with Refactored Code):**
 1.  **Execute Fresh Training Run for Experiment 1:**
     *   **Learning Rate:** `2.5e-4`.
     *   **Target Network Update Frequency:** `10,000` steps.
@@ -44,6 +54,7 @@
 **Known Issues/Challenges:**
 -   **Persistent Learning Stagnation:** The primary challenge is that the agent has not shown significant learning despite extensive training and initial hyperparameter tweaks. Evaluation scores remain at the minimum (-21).
 -   Identifying the root cause of non-learning (hyperparameters, subtle bug, exploration issues) is the main focus.
+-   **Code Complexity:** The previous monolithic implementation became unwieldy, leading to potential errors. The new modular structure should address this, but we'll need to verify that performance is not impacted.
 
 **Timeline Estimation (Rough for Experiment 1):**
--   Another significant training run (e.g., 1M-2M frames / ~10-20 hours) will be needed to assess the impact of the new target update frequency.
+-   Another significant training run (e.g., 1M-2M frames / ~10-20 hours) will be needed to assess the impact of the new target update frequency and verify the refactored code performs as expected.

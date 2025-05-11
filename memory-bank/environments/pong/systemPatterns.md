@@ -2,7 +2,26 @@
 
 This document outlines key code patterns, architectural choices, and reusable components specific to the Pong environment solution, based on the "Smart Defaults" provided.
 
-## 1. Environment Instantiation
+## 1. Code Organization
+
+The implementation has been refactored into a modular structure to improve maintainability and readability:
+
+```
+pong/
+├── pong_dqn.py              # Main entry point
+├── pong_dqn_utils.py        # Utilities (preprocessing, frame stacking, replay buffer)
+├── pong_dqn_model.py        # Neural network model and agent implementation
+├── pong_dqn_vis.py          # Visualization and plotting
+└── pong_dqn_train.py        # Training and evaluation logic
+```
+
+This modular approach allows for:
+- Better separation of concerns
+- Easier maintenance and updates
+- Reduced file sizes to prevent syntax issues
+- Clearer documentation of each component's purpose
+
+## 2. Environment Instantiation
 
 The environment is instantiated as follows, ensuring manual control over frame skipping and correct naming:
 
@@ -15,7 +34,7 @@ import ale_py # Required for ALE environments
 ```
 *Note: `PongNoFrameskip-v4` is the correct ID, not prefixed with `ALE/` for this variant. `ale_py` registration is needed.*
 
-## 2. Input Preprocessing
+## 3. Input Preprocessing (in `pong_dqn_utils.py`)
 
 A standard preprocessing function is used for each frame:
 
@@ -37,11 +56,10 @@ def preprocess(frame):
     frame = frame.astype(np.float32) / 255.0
     return frame
 ```
-*Note: Added a check for RGB frame before `cvtColor` as raw Atari frames are RGB.*
 
-## 3. Frame Stacking
+## 4. Frame Stacking (in `pong_dqn_utils.py`)
 
-A `FrameStack` class is used to maintain a history of the last `k` (typically 4) preprocessed frames, providing temporal context to the agent.
+A `FrameStack` class is used to maintain a history of the last `k` (typically 4) preprocessed frames, providing temporal context to the agent:
 
 ```python
 from collections import deque
@@ -60,18 +78,17 @@ class FrameStack:
         processed_obs = preprocess(obs)
         for _ in range(self.k):
             self.frames.append(processed_obs)
-        return np.stack(list(self.frames), axis=0) # Convert deque to list before stacking for older numpy
+        return np.stack(list(self.frames), axis=0)
 
     def step(self, obs):
         """
         Appends the new preprocessed observation to the stack and returns the stack.
         """
         self.frames.append(preprocess(obs))
-        return np.stack(list(self.frames), axis=0) # Convert deque to list before stacking
+        return np.stack(list(self.frames), axis=0)
 ```
-*Note: Modified `np.stack(self.frames, ...)` to `np.stack(list(self.frames), ...)` for broader compatibility as `np.stack` directly on a deque might behave differently or error on some NumPy versions.*
 
-## 4. DQN Model Architecture (PyTorch)
+## 5. DQN Model Architecture (in `pong_dqn_model.py`)
 
 The standard DeepMind 2015 Atari CNN architecture is implemented using PyTorch:
 
@@ -80,18 +97,17 @@ import torch
 import torch.nn as nn
 
 class PongDQN(nn.Module):
-    def __init__(self, input_channels=4, action_space=6): # input_channels is k from FrameStack
+    def __init__(self, input_channels=4, action_space=6):
         super().__init__()
         self.features = nn.Sequential(
             nn.Conv2d(input_channels, 32, kernel_size=8, stride=4), nn.ReLU(inplace=True),
             nn.Conv2d(32, 64, kernel_size=4, stride=2), nn.ReLU(inplace=True),
             nn.Conv2d(64, 64, kernel_size=3, stride=1), nn.ReLU(inplace=True),
         )
-        # Calculate the flattened size dynamically or pre-calculate based on 84x84 input
         # For input (4, 84, 84):
-        # Conv1: (84-8)/4 + 1 = 19 + 1 = 20 -> (32, 20, 20)
-        # Conv2: (20-4)/2 + 1 = 8 + 1 = 9   -> (64, 9, 9)
-        # Conv3: (9-3)/1 + 1 = 6 + 1 = 7    -> (64, 7, 7)
+        # Conv1: (84-8)/4 + 1 = 20 -> (32, 20, 20)
+        # Conv2: (20-4)/2 + 1 = 9  -> (64, 9, 9)
+        # Conv3: (9-3)/1 + 1 = 7   -> (64, 7, 7)
         self.fc_input_dims = 7 * 7 * 64
 
         self.fc = nn.Sequential(
@@ -100,133 +116,150 @@ class PongDQN(nn.Module):
         )
 
     def forward(self, x):
-        # Ensure input is float32 and on the correct device
-        # x = x.float() / 255.0 # Normalization should happen in preprocess
         x = self.features(x)
-        x = x.reshape(x.size(0), -1) # Use reshape for modern PyTorch, or view
+        x = x.reshape(x.size(0), -1)
         return self.fc(x)
-
-    def _get_conv_output_shape(self, shape):
-        """ Helper to compute output shape of conv layers for dynamic fc input size """
-        o = self.features(torch.zeros(1, *shape))
-        return int(np.prod(o.size()))
 ```
-*Note: Added `input_channels` to `__init__`, used `inplace=True` for ReLUs for minor memory optimization, and used `reshape` instead of `view` which is more flexible. The `_get_conv_output_shape` is a common helper if input dimensions might vary, but here `fc_input_dims` is pre-calculated.*
 
-## 5. Replay Buffer
+## 6. DQN Agent (in `pong_dqn_model.py`)
 
-A simple deque-based replay buffer is used:
+The agent handles:
+- Epsilon-greedy policy with exponential decay
+- Network parameter updates 
+- Target network updates
+- Model saving and loading
 
 ```python
-from collections import deque
-import random
+class DQNAgent:
+    def __init__(self, state_shape, action_space, lr=2.5e-4, gamma=0.99, 
+                 target_update_freq=10000, epsilon_start=1.0, epsilon_end=0.01, 
+                 epsilon_decay_frames=1e6, batch_size=32):
+        # Initialize networks, optimizer and parameters
+        # ...
 
+    def get_epsilon(self):
+        # Calculate current epsilon based on frames seen
+        # ...
+
+    def act(self, state, explore=True):
+        # Select action using epsilon-greedy
+        # ...
+
+    def learn(self, replay_buffer):
+        # Update network from experiences
+        # Apply gradient clipping
+        # Periodically update target network
+        # ...
+
+    def save(self, path):
+        # Save model weights
+        # ...
+
+    def load(self, path):
+        # Load model weights and update target network
+        # ...
+```
+
+## 7. Replay Buffer (in `pong_dqn_utils.py`)
+
+A simple deque-based replay buffer:
+
+```python
 class ReplayBuffer:
     def __init__(self, size=int(1e5)):
         self.buffer = deque(maxlen=size)
 
-    def store(self, transition): # transition is (state, action, reward, next_state, done)
+    def store(self, transition):
         self.buffer.append(transition)
 
     def sample(self, batch_size=32):
         if len(self.buffer) < batch_size:
-            return [] # Not enough samples yet
+            return []
         return random.sample(self.buffer, batch_size)
 
     def __len__(self):
         return len(self.buffer)
 ```
-*Note: Added a check in `sample` to prevent errors if buffer size is less than `batch_size`, and added `__len__`.*
-*Replay buffer stores transitions with **clipped rewards** (`np.sign(reward)`).*
+*Note: Replay buffer stores transitions with **clipped rewards** (`np.sign(reward)`).*
 
-## 6. Key Training Enhancements
+## 8. Visualization (in `pong_dqn_vis.py`)
 
-Several enhancements have been added to the standard DQN training loop:
-
-*   **Reward Clipping:** Raw rewards from the environment are clipped to `np.sign(reward)` (i.e., -1, 0, or 1) before being stored in the replay buffer and used for learning. This helps stabilize Q-value updates.
-*   **Replay Buffer Warmup:** Before the main training loop starts, the replay buffer is pre-filled with `50,000` experiences generated by a random policy. This ensures the agent learns from more diverse initial samples.
-*   **Gradient Clipping:** During the `agent.learn()` step, gradients are clipped to a maximum norm of `1.0` (`torch.nn.utils.clip_grad_norm_`) to prevent exploding gradients and further stabilize training.
-
-## 7. Training Loop Structure (Conceptual with Enhancements)
-
-The training loop will follow this general structure:
+The `plot_training_data` function now creates a single figure with multiple y-axes to display different metrics:
 
 ```python
-# Conceptual - actual implementation in pong_dqn.py
-# ... (Initializations: agent, replay_buffer, frame_stacker, env, stats variables) ...
-
-# Replay Buffer Warmup (before main loop)
-# for _ in range(WARMUP_STEPS):
-#     action = env.action_space.sample()
-#     # ... env.step(), preprocess, store clipped_reward in buffer ...
-
-# for episode_num in range(start_episode, MAX_EPISODES + 1):
-#     # ... (reset env, state, episode counters for loss/q-values) ...
-#     episode_start_time = time.time()
-
-#     while not done:
-#         # ... (get max Q for current state for logging) ...
-#         action = agent.act(state)  # ε-greedy, agent.current_frames increments
-#         next_obs, raw_reward, terminated, truncated, info = env.step(action)
-#         done = terminated or truncated
-#         # ... (render if human_render_during_training) ...
-        
-#         next_state = framestack.step(next_obs)
-#         clipped_reward = np.sign(raw_reward) # Reward Clipping
-#         replay_buffer.store((state, action, clipped_reward, next_state, float(done)))
-
-#         state = next_state
-#         current_episode_raw_reward += raw_reward # For logging actual game score
-#         current_episode_steps += 1
-            
-#         loss = agent.learn(replay_buffer) # Includes gradient clipping
-#         # ... (store loss if not None) ...
-#         # ... (check MAX_FRAMES_TOTAL) ...
-        
-#     episode_duration_seconds = time.time() - episode_start_time
-#     # ... (calculate cumulative time, avg loss, avg max Q for the episode) ...
-
-#     # Store detailed episode_data in all_episode_stats list
-#     # Print detailed log line including new metrics
-
-#     if episode_num % EVAL_INTERVAL_EPISODES == 0: # (e.g., every 10 episodes)
-#         # ... (evaluate agent with epsilon=0, save best model if improved) ...
-#         plot_training_data(all_episode_stats, ...) # Updated plotting
-
-#     if episode_num % SAVE_INTERVAL_EPISODES == 0: # (e.g., every 10 episodes)
-#         agent.save(MODEL_PATH) # Save checkpoint
-#         # Save all_episode_stats and other global stats to JSON
-#         # ... (json.dump) ...
-
-# # ... (Final save of model and stats) ...
-# plot_training_data(all_episode_stats, ...) # Final plot
+def plot_training_data(episode_stats, filename="pong_training_progress.png"):
+    # Create figure with primary y-axis for rewards
+    fig, ax1 = plt.subplots(figsize=(14, 7))
+    
+    # Plot rewards on primary y-axis
+    ax1.plot(episodes, rewards, label='Episode Reward')
+    ax1.plot(episodes, avg_rewards, label='Avg Reward (100ep)', color='red')
+    
+    # Add secondary y-axis for avg_max_q if available
+    if has_avg_max_q:
+        ax2 = ax1.twinx()
+        ax2.plot(episodes, avg_max_q_values, label='Avg Max Q', color='green')
+    
+    # Add tertiary y-axis for avg_loss if available
+    if has_avg_loss:
+        ax3 = ax1.twinx()
+        if ax2 is not None:
+            ax3.spines["right"].set_position(("outward", 60))
+        ax3.plot(episodes, avg_loss_values, label='Avg Loss', color='purple')
+    
+    # Add legend, save, etc.
+    # ...
 ```
 
-## 8. Logging and Statistics
+This approach provides a comprehensive view of all metrics on a single plot with properly scaled axes.
 
-To better understand the learning process, especially during periods of stagnation, the following metrics are tracked and saved:
--   Per-episode:
-    -   Raw reward sum.
-    -   Number of steps.
-    -   Epsilon value at the end of the episode.
-    -   Timestamp of episode completion.
-    -   Duration of the episode in seconds.
-    -   **Average loss** during the episode.
-    -   **Average maximum Q-value** predicted by the agent during the episode.
--   Global:
-    -   Total agent steps completed.
-    -   Last completed episode number.
-    -   Best evaluation reward achieved so far.
-    -   Cumulative active training time in seconds.
--   All these statistics are saved to `data/pong/pong_training_stats.json` to allow for resumable training and persistent plotting.
--   The console log also includes the average loss, average max Q, and cumulative training time.
+## 9. Training and Evaluation Logic (in `pong_dqn_train.py`) 
 
-## 9. Plotting
+The training and evaluation functions provide the main logic for the DQN algorithm:
 
-The `plot_training_data` function generates a multi-panel plot:
--   Panel 1: Episode rewards and 100-episode rolling average reward.
--   Panel 2 (if data available): Average maximum Q-value per episode.
--   Panel 3 (if data available): Average loss per episode.
-This provides a more comprehensive visual overview of the training dynamics.
+- **Training function:** Manages the main training loop with:
+  - Replay buffer warmup
+  - Epsilon-greedy exploration
+  - Experience collection and network updates
+  - Periodic evaluation and checkpointing
+  - Detailed logging and statistics tracking
 
-These patterns and enhancements aim to create a robust and observable DQN implementation for Pong.
+- **Evaluation function:** Provides greedy evaluation of the trained agent with:
+  - No exploration (epsilon=0)
+  - Optional rendering for visual inspection
+  - Average reward calculation across multiple episodes
+
+## 10. Key Training Enhancements
+
+The implementation includes several enhancements to the standard DQN algorithm:
+
+- **Reward Clipping:** Raw rewards from the environment are clipped to `np.sign(reward)` (i.e., -1, 0, or 1) before being stored in the replay buffer and used for learning. This helps stabilize Q-value updates.
+
+- **Replay Buffer Warmup:** Before the main training loop starts, the replay buffer is pre-filled with `50,000` experiences generated by a random policy. This ensures the agent learns from more diverse initial samples.
+
+- **Gradient Clipping:** During the `agent.learn()` step, gradients are clipped to a maximum norm of `1.0` (`torch.nn.utils.clip_grad_norm_`) to prevent exploding gradients and further stabilize training.
+
+- **Experiment 1 Settings:**
+  - Learning Rate: `2.5e-4`
+  - Target Network Update Frequency: `10,000` steps (increased from 1,000)
+
+## 11. Logging and Statistics
+
+The implementation tracks and logs detailed statistics:
+
+- **Per-episode metrics:**
+  - Raw reward sum
+  - Number of steps
+  - Epsilon value
+  - Average loss 
+  - Average maximum Q-value 
+  - Episode duration
+
+- **Global metrics:**
+  - Total agent steps
+  - Best evaluation reward
+  - Cumulative training time
+
+All statistics are saved to `data/pong/pong_training_stats.json` for resumable training and visualization.
+
+This modular and enhanced implementation provides a robust framework for experimenting with DQN on the Pong environment while maintaining good software engineering practices.

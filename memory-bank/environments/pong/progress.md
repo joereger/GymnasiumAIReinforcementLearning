@@ -1,55 +1,49 @@
 # Progress: Pong (`ALE/PongNoFrameskip-v4`)
 
-**Overall Status:** Initial setup phase for the Pong environment solution.
+**Overall Status:** DQN agent implemented. Initial training runs showed stagnation. Currently preparing for "Experiment 1" with adjusted hyperparameters and enhanced logging.
 
-**Current Phase:** Environment Setup and Initial Memory Bank Population.
+**Current Phase:** Iterative Tuning and Observation.
 
 **Completed Steps:**
-1.  **Directory Structure Created (Root Level):**
-    *   `pong/` directory created for Python solution code.
-    *   `data/pong/` directory created for storing environment-specific data (models, logs, etc.).
-2.  **Memory Bank Structure Created (`memory-bank/environments/pong/`):**
-    *   `memory-bank/environments/pong/` directory created.
-    *   `environment_brief.md`: Created and populated with details about `ALE/PongNoFrameskip-v4`.
-    *   `approaches.md`: Created and populated with the DQN "Smart Defaults" strategy.
-    *   `systemPatterns.md`: Created and populated with Python code snippets for preprocessing, frame stacking, DQN model, and replay buffer, based on "Smart Defaults".
-    *   `techContext.md`: Created and populated with relevant technologies, libraries, and technical considerations for Pong.
-    *   `activeContext.md`: Created and populated, outlining current tasks and next steps for Pong.
+1.  **Initial Setup:**
+    *   Directory structure (`pong/`, `data/pong/`, `memory-bank/environments/pong/`) created.
+    *   Initial Pong-specific Memory Bank files populated.
+2.  **`pong/pong_dqn.py` Implementation:**
+    *   Core DQN components implemented: `preprocess`, `FrameStack`, `PongDQN` model, `ReplayBuffer`, `DQNAgent`.
+    *   Training loop, evaluation, plotting, and command-line interaction for train/evaluate choices.
+    *   Robust JSON-based statistics saving/loading for resumable training and charts.
+    *   Seed correction for warmup.
+    *   Environment ID corrected to `PongNoFrameskip-v4`.
+3.  **"High-Impact Fixes" Implemented:**
+    *   Reward Clipping (`np.sign(reward)`).
+    *   Replay Buffer Warmup (50,000 steps).
+    *   Gradient Clipping (norm 1.0).
+    *   Ensured `agent.current_frames` is correctly restored when resuming training.
+4.  **Enhanced Logging & Plotting:**
+    *   Added collection and logging of average max Q-value and average loss per episode.
+    *   Plotting function updated to display these new metrics.
+5.  **Initial Training Runs & Observation:**
+    *   Run 1 (LR `2.5e-4`, Target Update `1k` steps): ~1.2M steps, ~9 hours. Result: Stagnation, avg reward ~-20.5, eval score -21.
+    *   Run 2 (LR `1e-4`, Target Update `1k` steps): ~500 episodes, ~1.7M total steps from combined runs. Result: Continued stagnation, avg reward trended slightly worse to ~-20.6, eval score -21.
 
 **What's Working:**
--   Basic directory and Memory Bank file structure for Pong is in place.
--   Initial documentation reflecting the "Smart Defaults" plan is complete.
+-   The `pong_dqn.py` script runs, trains, saves/loads checkpoints and stats, and generates multi-panel plots.
+-   The core DQN architecture and training enhancements (clipping, warmup) are in place.
 
-**What's Next:**
-1.  **Create `pong/pong_dqn.py`:**
-    *   Implement all core components: `preprocess`, `FrameStack`, `PongDQN` model, `ReplayBuffer`.
-    *   Implement the `DQNAgent` class or equivalent logic (action selection, learning, target updates).
-    *   Set up hyperparameters as per "Smart Defaults".
-    *   Develop the main training loop.
-    *   Add evaluation and plotting utilities.
-    *   Confirm and use the correct action space for `ALE/PongNoFrameskip-v4`.
-2.  **Initial Code Testing:**
-    *   Ensure the environment can be created and reset.
-    *   Test preprocessing and frame stacking.
-    *   Verify the DQN model can be instantiated and perform a forward pass.
-    *   Test the replay buffer functionality.
-3.  **Training Run:**
-    *   Perform an initial training run to check for major issues and observe learning behavior.
-4.  **Refinement and Iteration:**
-    *   Debug any issues found during initial testing and training.
-    *   Tune hyperparameters if necessary based on initial results.
-5.  **Documentation Updates:**
-    *   Update this `progress.md` file as milestones are achieved.
-    *   Update `activeContext.md` with ongoing work.
-    *   Potentially refine `approaches.md` or `systemPatterns.md` if any deviations from the initial plan occur.
-6.  **Update Top-Level Memory Bank:**
-    *   Update project-level `activeContext.md` and `progress.md` to reflect that work on the Pong environment has commenced.
+**What's Next (Experiment 1):**
+1.  **Execute Fresh Training Run for Experiment 1:**
+    *   **Learning Rate:** `2.5e-4`.
+    *   **Target Network Update Frequency:** `10,000` steps.
+    *   All other enhancements (reward clipping, 50k warmup, gradient clipping, robust stats, new logging) active.
+    *   Ensure previous stats/models are cleared or not loaded to start fresh.
+2.  **Monitor Closely:** Observe 100-episode average reward, evaluation scores, average max Q-values, and average loss.
+3.  **Analyze Results:** Determine if the increased target update frequency leads to improved learning stability and performance.
+4.  **Documentation:** Update this `progress.md` and other Memory Bank files with the outcomes of Experiment 1.
+5.  **Further Iteration:** Based on Experiment 1 results, decide on subsequent hyperparameter adjustments or other diagnostic steps if stagnation persists.
 
 **Known Issues/Challenges:**
--   None specific to Pong yet, beyond the general complexities of training RL agents.
--   Need to confirm the exact action space of `ALE/PongNoFrameskip-v4` when implementing `pong_dqn.py`.
+-   **Persistent Learning Stagnation:** The primary challenge is that the agent has not shown significant learning despite extensive training and initial hyperparameter tweaks. Evaluation scores remain at the minimum (-21).
+-   Identifying the root cause of non-learning (hyperparameters, subtle bug, exploration issues) is the main focus.
 
-**Timeline Estimation (Rough):**
--   Initial `pong_dqn.py` implementation: 1-2 sessions.
--   Testing and Debugging: 1 session.
--   Initial Training Run & Observation: Ongoing.
+**Timeline Estimation (Rough for Experiment 1):**
+-   Another significant training run (e.g., 1M-2M frames / ~10-20 hours) will be needed to assess the impact of the new target update frequency.

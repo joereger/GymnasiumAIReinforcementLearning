@@ -13,7 +13,7 @@ from pong_dqn_model import DQNAgent, device
 from pong_dqn_vis import plot_training_data
 
 # --- Evaluation Function ---
-def evaluate_pong_agent(env_name, model_path_to_load, num_episodes=10, human_render=False):
+def evaluate_pong_agent(env_name, model_path_to_load, num_episodes=10, human_render=False, eval_epsilon=0.05):
     """
     Evaluate a trained DQN agent on the Pong environment.
     
@@ -22,22 +22,26 @@ def evaluate_pong_agent(env_name, model_path_to_load, num_episodes=10, human_ren
         model_path_to_load: Path to the saved model weights
         num_episodes: Number of episodes to evaluate
         human_render: Whether to render the environment for human viewing
+        eval_epsilon: Small exploration rate during evaluation (e.g., 0.05)
+                      Set to 0 for pure greedy policy
     
     Returns:
         The average reward over the evaluation episodes
     """
     print(f"\nEvaluating agent with model: {model_path_to_load} for {num_episodes} episodes...")
+    print(f"Using evaluation epsilon: {eval_epsilon}")
     eval_render_mode = "human" if human_render else "rgb_array"
     
     # Register ALE environments if needed
     if 'ale_py' in globals() and hasattr(ale_py, '__version__'):
         gym.register_envs(ale_py)
         
-    # Create properly wrapped evaluation environment
-    eval_env = make_atari_env(env_name, render_mode=eval_render_mode)
+    # Create properly wrapped evaluation environment with reduced actions
+    eval_env = make_atari_env(env_name, render_mode=eval_render_mode, reduced_actions=True)
     
     # Get env properties
     ACTION_SPACE_SIZE = eval_env.action_space.n
+    print(f"Evaluation environment action space size: {ACTION_SPACE_SIZE}")
     
     # Create agent with the proper state shape (4, 84, 84)
     STATE_SHAPE_EVAL = (4, 84, 84)  # Channels-first shape for PyTorch
@@ -61,15 +65,25 @@ def evaluate_pong_agent(env_name, model_path_to_load, num_episodes=10, human_ren
 
     # Run evaluation episodes
     total_rewards = []
+    action_distribution = {}
+    
     for episode in range(num_episodes):
         state, info = eval_env.reset(seed=random.randint(0, 1_000_000)) 
         done = False
         episode_reward = 0
         steps = 0
+        episode_actions = []
         
         while not done:
-            # Select greedy action (no exploration)
-            action = agent_eval.act(state, explore=False) 
+            # Allow a small amount of exploration during evaluation
+            if random.random() < eval_epsilon:
+                action = random.randrange(ACTION_SPACE_SIZE)
+                exploration_type = "random"
+            else:
+                action = agent_eval.act(state, explore=False)
+                exploration_type = "greedy"
+            
+            episode_actions.append(action)
             next_state, reward, terminated, truncated, info = eval_env.step(action)
             done = terminated or truncated
             
@@ -83,14 +97,24 @@ def evaluate_pong_agent(env_name, model_path_to_load, num_episodes=10, human_ren
             if steps > 20000: 
                 print("Warning: Evaluation episode exceeded 20000 steps.")
                 break
+        
+        # Count actions taken
+        episode_action_counts = {}
+        for a in range(ACTION_SPACE_SIZE):
+            count = episode_actions.count(a)
+            episode_action_counts[a] = count
+            action_distribution[a] = action_distribution.get(a, 0) + count
                 
         total_rewards.append(episode_reward)
-        print(f"Evaluation Episode {episode + 1}/{num_episodes}: Reward = {episode_reward:.2f}")
+        print(f"Evaluation Episode {episode + 1}/{num_episodes}: " +
+              f"Reward = {episode_reward:.2f}, Steps = {steps}, " +
+              f"Actions = {episode_action_counts}")
 
-    # Clean up and return results
+    # Clean up and report results
     eval_env.close()
     avg_reward = np.mean(total_rewards)
     print(f"Average evaluation reward over {num_episodes} episodes: {avg_reward:.2f}")
+    print(f"Overall action distribution: {action_distribution}")
     return avg_reward
 
 # --- Training Function ---
@@ -108,16 +132,16 @@ def train_pong_agent(human_render_during_training=False, load_checkpoint_flag=Fa
     # Environment and hyperparameters
     ENV_NAME = "PongNoFrameskip-v4"
     train_render_mode = "human" if human_render_during_training else None
-    LEARNING_RATE = 2.5e-4  # For Experiment 1
+    LEARNING_RATE = 2.5e-4
     BATCH_SIZE = 32
-    REPLAY_BUFFER_SIZE = int(1e5)
+    REPLAY_BUFFER_SIZE = int(5e4)  # Reduced
     GAMMA = 0.99
-    TARGET_UPDATE_FREQ = 10000  # For Experiment 1
+    TARGET_UPDATE_FREQ = 1000     # Reduced
     EPSILON_START = 1.0
     EPSILON_END = 0.01
-    EPSILON_DECAY_FRAMES = int(1e6)
+    EPSILON_DECAY_FRAMES = int(1e5) # Reduced
     MAX_EPISODES = 5000
-    MAX_FRAMES_TOTAL = int(2e6)
+    MAX_FRAMES_TOTAL = int(5e5)   # Reduced
     EVAL_INTERVAL_EPISODES = 10 
     SAVE_INTERVAL_EPISODES = 10 
     FRAMES_PER_STATE = 4
@@ -144,10 +168,10 @@ def train_pong_agent(human_render_during_training=False, load_checkpoint_flag=Fa
     if 'ale_py' in globals() and hasattr(ale_py, '__version__'):
         gym.register_envs(ale_py)
     
-    # Create properly wrapped environment
-    env = make_atari_env(ENV_NAME, render_mode=train_render_mode)
+    # Create properly wrapped environment with reduced action space
+    env = make_atari_env(ENV_NAME, render_mode=train_render_mode, reduced_actions=True)
     ACTION_SPACE_SIZE = env.action_space.n
-    print(f"Action space size: {ACTION_SPACE_SIZE}")
+    print(f"Training with reduced action space: {ACTION_SPACE_SIZE} actions")
 
     # State shape is (4, 84, 84) for channels-first PyTorch input
     STATE_SHAPE = (4, 84, 84)
@@ -198,30 +222,7 @@ def train_pong_agent(human_render_during_training=False, load_checkpoint_flag=Fa
     # Initialize replay buffer
     replay_buffer = ReplayBuffer(size=REPLAY_BUFFER_SIZE)
     
-    # Warm up replay buffer if needed
-    WARMUP_STEPS = 50000 
-    if not load_checkpoint_flag or agent.current_frames < WARMUP_STEPS : 
-        print(f"Warming up replay buffer with random policy for {WARMUP_STEPS} steps...")
-        warmup_seed = SEED - 1 if not load_checkpoint_flag else SEED + start_episode + agent.current_frames
-        state_warmup, _ = env.reset(seed=warmup_seed) 
-        frames_done_warmup = 0
-        while frames_done_warmup < WARMUP_STEPS:
-            action_warmup = env.action_space.sample()
-            next_state_warmup, reward_warmup, terminated_warmup, truncated_warmup, _ = env.step(action_warmup)
-            done_warmup = terminated_warmup or truncated_warmup
-            
-            # Reward is already clipped by the ClipRewardEnv wrapper
-            replay_buffer.store((state_warmup, action_warmup, reward_warmup, next_state_warmup, float(done_warmup)))
-            
-            if done_warmup:
-                warmup_seed += 1 
-                state_warmup, _ = env.reset(seed=warmup_seed) 
-            else:
-                state_warmup = next_state_warmup
-            frames_done_warmup +=1
-            if frames_done_warmup % 1000 == 0:
-                print(f"Warmup step {frames_done_warmup}/{WARMUP_STEPS}")
-        print("Replay buffer warmup complete.")
+    # No warmup phase, learning starts once buffer has BATCH_SIZE samples
 
     # Start training timer
     session_start_time = time.time()

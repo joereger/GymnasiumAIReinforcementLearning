@@ -206,7 +206,34 @@ class StackFrame(gym.Wrapper):
         # Stack frames along first dimension (channels first for PyTorch)
         return np.stack(list(self.frames), axis=0)
 
-def make_atari_env(env_id, render_mode=None, max_episode_steps=None):
+class ReducedActionSpace(gym.ActionWrapper):
+    """
+    Reduces the action space to only 3 relevant actions for Pong:
+    NOOP (0), RIGHT/UP (2), LEFT/DOWN (3)
+    
+    This simplifies learning since the agent only needs to control
+    vertical paddle movement.
+    """
+    def __init__(self, env):
+        super(ReducedActionSpace, self).__init__(env)
+        # Original actions: NOOP(0), FIRE(1), RIGHT(2), LEFT(3), RIGHTFIRE(4), LEFTFIRE(5)
+        # For Pong:
+        # - RIGHT (2) moves paddle UP
+        # - LEFT (3) moves paddle DOWN
+        # - NOOP (0) keeps paddle in place
+        self.valid_actions = [0, 2, 3]  # [STAY, UP, DOWN]
+        self.action_space = gym.spaces.Discrete(len(self.valid_actions))
+        
+        # Store action meanings for debugging
+        self.action_meanings = env.unwrapped.get_action_meanings()
+        print(f"Reduced action space from {len(self.action_meanings)} to {len(self.valid_actions)} actions")
+        print(f"Using actions: {[self.action_meanings[a] for a in self.valid_actions]}")
+    
+    def action(self, action):
+        """Map the reduced action index to the original action."""
+        return self.valid_actions[action]
+
+def make_atari_env(env_id, render_mode=None, max_episode_steps=None, reduced_actions=True):
     """Create a properly wrapped Atari environment."""
     env = gym.make(env_id, render_mode=render_mode, repeat_action_probability=0.0, full_action_space=False)
     if max_episode_steps is not None:
@@ -221,6 +248,10 @@ def make_atari_env(env_id, render_mode=None, max_episode_steps=None):
     env = WarpFrame(env)
     env = ClipRewardEnv(env)
     env = StackFrame(env, 4)
+    
+    # Optionally reduce action space to simplify learning
+    if reduced_actions:
+        env = ReducedActionSpace(env)
 
     return env
 

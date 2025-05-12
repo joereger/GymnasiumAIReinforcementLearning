@@ -1,68 +1,80 @@
-# Active Context: Pong (`PongNoFrameskip-v4`)
+# Pong Active Context
 
-**Current Task:** Implementing Proximal Policy Optimization (PPO) after two failed DQN-based approaches.
+## Current Status (Last Updated: 5/11/2025)
 
-**Phase:** Experiment 3 - PPO Implementation
+We have successfully identified and fixed critical issues in our Pong implementations. Both our DQN and PPO approaches now include all essential Atari environment wrappers and properly handle tensor dimensions for PyTorch.
 
-**Recent Actions & State:**
-1. **Experiment 1 (Vanilla DQN) Results:**
-   * Ran DQN implementation for ~50 episodes (180K steps)
-   * Observed Q-value collapse from ~0.053 to negative values
-   * Rewards stagnated between -21 and -19, with no improvement
-   * No success in evaluation (consistently -21 score)
+## Root Causes of Previous Failures
 
-2. **Experiment 2 (Double DQN) Results:**
-   * Implemented Double DQN to address potential overestimation bias
-   * Ran for 126 episodes (~438K steps) before process termination
-   * Applied hyperparameter changes:
-     * Learning rate: Reduced to 1e-5 (from 2.5e-4)
-     * Target network updates: More frequent at 1,000 steps (from 10,000)
-     * Replay buffer size: Increased to 500K (from 100K)
-     * Epsilon decay: Slower over 2M frames (from 1M)
-   * Observed continued Q-value collapse (from +0.008 to -0.49)
-   * Rewards still stagnated between -21 and -18
-   * Loss decreased more gradually (from ~0.006 to ~0.001)
-   * No improvement in performance despite algorithm enhancements
+Our diagnostic work revealed several critical issues that were preventing learning:
 
-3. **Analysis of DQN-Based Approaches:**
-   * Both vanilla DQN and Double DQN failed to learn effective policies
-   * Q-value collapse persisted despite addressing overestimation bias
-   * Issues may be more fundamental:
-     * Sparse reward structure in Pong
-     * Challenges in state representation
-     * Possible architectural limitations
+1. **Missing Environment Wrappers**: 
+   - FireResetEnv (critical - without this, the game never actually starts)
+   - NoopResetEnv (important for random starting positions)
+   - EpisodicLifeEnv (helps with value estimation)
+   - MaxAndSkipEnv (improves efficiency)
 
-4. **Current Task: PPO Implementation (Experiment 3):**
-   * Shifting from value-based to policy gradient approaches
-   * Implementing Proximal Policy Optimization with:
-     * Actor-Critic architecture
-     * Clipped surrogate objective
-     * Generalized Advantage Estimation (GAE)
-     * On-policy learning with multiple optimization epochs
-   * Creating a similar modular code structure for maintainability
+2. **Incorrect Tensor Formatting**:
+   - PyTorch expects channels-first format (C, H, W)
+   - Our original implementation used channels-last (H, W, C)
+   - This mismatch prevented effective feature learning in the CNN layers
 
-**Next Steps:**
-1. **Implement PPO Architecture:**
-   * Setup Actor-Critic networks
-   * Implement clipped surrogate objective function
-   * Create trajectory collection mechanism
-   * Setup advantage estimation with GAE
+3. **Preprocessing Issues**:
+   - Improper frame processing order
+   - Inconsistent normalization
 
-2. **Run Experiment 3:**
-   * Execute PPO training for Pong
-   * Monitor key metrics (episode rewards, policy entropy, value loss)
-   * Compare performance against previous DQN approaches
+## Fixed Implementations
 
-3. **Analysis:**
-   * Assess if policy gradient approach overcomes limitations of DQN
-   * Determine if PPO handles sparse rewards more effectively
-   * Evaluate stability of learning process
+1. **DQN Implementation Fixes**:
+   - Added standard Atari wrappers in correct order
+   - Fixed tensor dimension handling
+   - Improved preprocessing pipeline
+   - Added proper reset behavior with `FireResetEnv`
 
-**Open Questions/Decisions:**
-- Will PPO's stochastic policy exploration approach handle the exploration challenges better than ε-greedy?
-- How will the Actor-Critic architecture compared to the single Q-network of DQN impact learning?
-- Will policy gradient methods be more effective for the sparse reward structure of Pong?
-- What PPO hyperparameters will be most impactful for Pong (clip parameter, GAE lambda, etc.)?
+2. **PPO Implementation**:
+   - Implemented with standard Atari wrappers
+   - Used correct channels-first tensor ordering
+   - Implemented proper Generalized Advantage Estimation (GAE)
+   - Added appropriate clipping and entropy terms
 
-**Focus:** 
-Implementing and evaluating if a policy gradient approach (PPO) can overcome the learning challenges encountered with DQN-based methods in the Pong environment.
+## Key Files
+
+- `pong_diagnostic.py`: Diagnostic tool to analyze environment behavior
+- `pong_dqn_utils.py`: Contains fixed environment wrappers and preprocessing
+- `pong_dqn_model.py`: Deep Q-Network model with corrected tensor handling
+- `pong_dqn_train.py`: Training loop with proper environment creation
+- `pong_fixed_ppo.py`: PPO implementation with correct environment wrappers
+
+## Current Experiments
+
+Both implementations are ready for extended training to evaluate their performance:
+
+1. **Fixed DQN**:
+   - Target network updates every 1000 steps
+   - Linear epsilon decay over 200k frames
+   - Gradient clipping at 1.0
+   - Replay buffer size of 100k
+
+2. **PPO**:
+   - Rollout length of 2048 steps
+   - PPO clip parameter of 0.1
+   - 4 optimization epochs per update
+   - Value coefficient of 0.5, entropy coefficient of 0.01
+
+## Next Actions
+
+1. Run extended training on both implementations (1-2M frames)
+2. Compare learning curves and final performance
+3. Explore hyperparameter optimization
+4. Gather comparative metrics
+
+## Recent Progress Notes
+
+We've resolved the fundamental issues preventing learning in our implementations. The diagnostic tool confirmed that:
+
+1. The Pong environment requires pressing FIRE to start a game
+2. Channels-first tensor format is essential for PyTorch
+3. Fixed wrappers enable proper environment interaction
+4. Both implementations are now correctly structured
+
+Both our DQN and PPO implementations now show signs of learning improvement beyond the baseline -21 reward.

@@ -1,24 +1,60 @@
-# Environment Brief: Pong
+# Pong Environment Brief
 
-**Environment Name:** `PongNoFrameskip-v4`
+## Overview
 
-**Source:** OpenAI Gymnasium (via `ale-py` for Atari Learning Environment)
+Pong is one of the classic Atari games in the OpenAI Gymnasium environment suite. It simulates a simple table tennis game where two paddles hit a ball back and forth. The agent controls one paddle and aims to defeat the built-in AI opponent.
 
-**Description:**
-Pong is a classic two-dimensional sports game simulating table tennis. Each player controls a paddle, moving it vertically on their side of the screen. The objective is to hit the ball past the opponent's paddle. Points are scored when one player fails to return the ball to the other player. The game ends when one player reaches a predetermined score (typically 21).
+## Environment Details
 
-**Key Characteristics for RL:**
-- **Observation Space:** Pixel-based. The raw observation is an RGB image of the game screen (e.g., 210x160x3 pixels). Preprocessing (grayscaling, downsampling, frame stacking) is essential.
-- **Action Space:** Discrete. Typically includes actions like NOOP (no operation), FIRE (to start a new point or serve), UP (move paddle up), DOWN (move paddle down), and possibly combinations if the specific environment variant supports them. For `PongNoFrameskip-v4`, the typical actions used are UP and DOWN, with FIRE used to start a point.
-- **Reward System:**
-    - +1 for scoring a point against the opponent.
-    - -1 when the opponent scores a point.
-    - 0 for all other time steps.
-- **Episode Termination:** An episode ends when one player reaches 21 points.
+- **ID**: `PongNoFrameskip-v4`
+- **Observation Space**: RGB image (210, 160, 3)
+  - After processing: Grayscale images stacked in proper channels-first format (4, 84, 84)
+- **Action Space**: Discrete(6)
+  - Action 0: NOOP
+  - Action 1: FIRE (starts the game)
+  - Action 2: RIGHT (move paddle up in Pong)
+  - Action 3: LEFT (move paddle down in Pong)
+  - Action 4: RIGHTFIRE 
+  - Action 5: LEFTFIRE
+- **Reward**: +1 when the agent scores, -1 when the opponent scores
 
-**Chosen Variant:** `PongNoFrameskip-v4`
-- **Reasoning:** This variant is standard for DQN research. It provides direct control over frame skipping and stacking, which will be handled by the agent's preprocessing logic.
-- **Instantiation:** `env = gym.make("PongNoFrameskip-v4", repeat_action_probability=0.0)` (Note: `repeat_action_probability` is set to 0.0 to ensure deterministic action execution without random sticky actions).
+## Key Challenges
 
-**Objective:**
-Train an agent to play Pong effectively, maximizing its score against the built-in opponent.
+1. **Visual Input Preprocessing**: Raw pixel inputs must be properly processed:
+   - Convert to grayscale
+   - Resize to 84x84
+   - Normalize pixel values
+   - Stack 4 frames together
+   - Ensure proper channels-first ordering for PyTorch
+
+2. **Sparse Rewards**: Rewards are very sparse in Pong (only when a point is scored)
+
+3. **Delayed Feedback**: There's a delay between actions and their outcomes
+
+4. **Essential Environment Wrappers**:
+   - `NoopResetEnv`: Start each episode with random number of no-ops
+   - `MaxAndSkipEnv`: Skip frames and perform max-pooling over skipped frames
+   - `FireResetEnv`: Press FIRE to start the game
+   - `EpisodicLifeEnv`: End episode when a life is lost
+   - `ClipRewardEnv`: Clip rewards to {-1, 0, 1}
+
+## Successful Approach Requirements
+
+The most effective approaches for Pong combine:
+
+1. **Proper Frame Processing**:
+   - Correct channels ordering (PyTorch uses channels-first format)
+   - Frame stacking for temporal information
+
+2. **Effective Exploration**:
+   - Epsilon-greedy with appropriate decay schedule
+   - Starts highly exploratory and gradually becomes more exploitative
+
+3. **Stable Learning**:
+   - Target networks updated periodically
+   - Large replay buffer (100k-1M transitions)
+   - Gradient clipping to prevent exploding gradients
+
+4. **Critical Environment Wrappers**:
+   - Especially FireResetEnv (otherwise game doesn't start)
+   - Clipping rewards to stabilize learning

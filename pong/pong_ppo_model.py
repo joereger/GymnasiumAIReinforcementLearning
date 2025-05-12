@@ -172,6 +172,11 @@ class PPOAgent:
         """
         self.steps += 1
         
+        # Ensure state has correct format (channels first for PyTorch)
+        if len(state.shape) == 3 and state.shape[0] != self.state_shape[0]:
+            # Convert from (H, W, C) to (C, H, W) if needed
+            state = np.transpose(state, (2, 0, 1))
+            
         # Convert state to tensor and add batch dimension
         state_tensor = torch.FloatTensor(state).unsqueeze(0).to(device)
         

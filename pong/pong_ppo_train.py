@@ -7,7 +7,7 @@ import os
 import json
 
 # Import from other modules
-from pong_ppo_utils import FrameStack, RolloutBuffer, format_time, preprocess
+from pong_ppo_utils import make_atari_env, RolloutBuffer, format_time
 from pong_ppo_model import PPOAgent, device
 from pong_ppo_vis import plot_training_data, save_training_stats, load_training_stats
 
@@ -28,18 +28,14 @@ def evaluate_ppo_agent(env_name, agent, num_episodes=10, human_render=False):
     print(f"\nEvaluating PPO agent for {num_episodes} episodes...")
     eval_render_mode = "human" if human_render else "rgb_array"
     
-    # Create evaluation environment
-    eval_env = gym.make(env_name, render_mode=eval_render_mode, repeat_action_probability=0.0)
-    
-    # Initialize frame stacker for eval
-    frame_stacker_eval = FrameStack(k=4)
+    # Create properly wrapped evaluation environment
+    eval_env = make_atari_env(env_name, render_mode=eval_render_mode)
     
     # Run evaluation episodes
     total_rewards = []
     
     for episode in range(num_episodes):
-        obs, info = eval_env.reset(seed=random.randint(0, 1_000_000))
-        state = frame_stacker_eval.reset(obs)
+        state, info = eval_env.reset(seed=random.randint(0, 1_000_000))
         done = False
         episode_reward = 0
         steps = 0
@@ -47,10 +43,10 @@ def evaluate_ppo_agent(env_name, agent, num_episodes=10, human_render=False):
         while not done:
             # Select greedy action (deterministic)
             action, _, _ = agent.act(state, deterministic=True)
-            next_obs, reward, terminated, truncated, info = eval_env.step(action)
+            next_state, reward, terminated, truncated, info = eval_env.step(action)
             done = terminated or truncated
             
-            state = frame_stacker_eval.step(next_obs)
+            state = next_state
             episode_reward += reward
             steps += 1
             
@@ -133,16 +129,13 @@ def train_ppo_agent(
     STATS_PATH = os.path.join(DATA_DIR, "pong_ppo_stats.json")
     PLOT_PATH = os.path.join(DATA_DIR, "pong_ppo_progress.png")
     
-    # Create environment
-    env = gym.make(ENV_NAME, render_mode=train_render_mode, repeat_action_probability=0.0)
+    # Create properly wrapped environment
+    env = make_atari_env(ENV_NAME, render_mode=train_render_mode)
     ACTION_SPACE_SIZE = env.action_space.n
     print(f"Action space size: {ACTION_SPACE_SIZE}")
     
-    # Initialize frame stacker
-    frame_stacker = FrameStack(k=4)
-    temp_obs, _ = env.reset(seed=SEED)
-    temp_state = frame_stacker.reset(temp_obs)
-    STATE_SHAPE = temp_state.shape
+    # State shape is (4, 84, 84) for channels-first PyTorch input
+    STATE_SHAPE = (4, 84, 84)
     
     # Create PPO agent
     agent = PPOAgent(
@@ -247,8 +240,7 @@ def train_ppo_agent(
     
     while current_episode <= max_episodes:
         # Reset environment for new episode
-        obs, info = env.reset(seed=SEED + current_episode)
-        state = frame_stacker.reset(obs)
+        state, info = env.reset(seed=SEED + current_episode)
         
         # Initialize episode stats
         episode_reward = 0
@@ -273,11 +265,8 @@ def train_ppo_agent(
                 action, log_prob, value = agent.act(state)
                 
                 # Take action in environment
-                next_obs, reward, terminated, truncated, info = env.step(action)
+                next_state, reward, terminated, truncated, info = env.step(action)
                 done = terminated or truncated
-                
-                # Process next state
-                next_state = frame_stacker.step(next_obs)
                 
                 # Store transition in rollout buffer
                 rollout_buffer.store(state, action, reward, float(done), log_prob, value)

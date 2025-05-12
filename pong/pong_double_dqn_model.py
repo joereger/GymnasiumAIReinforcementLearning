@@ -89,6 +89,11 @@ class DoubleDQNAgent:
             return random.randrange(self.action_space)
         else:
             with torch.no_grad():
+                # Ensure state has correct format (channels first for PyTorch)
+                if len(state.shape) == 3 and state.shape[0] != self.state_shape[0]:
+                    # Convert from (H, W, C) to (C, H, W) if needed
+                    state = np.transpose(state, (2, 0, 1))
+                    
                 state_tensor = torch.FloatTensor(state).unsqueeze(0).to(device)
                 q_values = self.policy_net(state_tensor)
                 return q_values.argmax(dim=1).item()

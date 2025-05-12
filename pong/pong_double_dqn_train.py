@@ -8,7 +8,7 @@ import json
 import ale_py
 
 # Import from other modules
-from pong_double_dqn_utils import FrameStack, ReplayBuffer, format_time, preprocess
+from pong_double_dqn_utils import make_atari_env, ReplayBuffer, format_time
 from pong_double_dqn_model import DoubleDQNAgent, device
 from pong_double_dqn_vis import plot_training_data
 
@@ -33,17 +33,14 @@ def evaluate_double_dqn_agent(env_name, model_path_to_load, num_episodes=10, hum
     if 'ale_py' in globals() and hasattr(ale_py, '__version__'):
         gym.register_envs(ale_py)
         
-    # Create evaluation environment
-    eval_env = gym.make(env_name, render_mode=eval_render_mode, repeat_action_probability=0.0)
+    # Create properly wrapped evaluation environment
+    eval_env = make_atari_env(env_name, render_mode=eval_render_mode)
     
     # Get env properties
     ACTION_SPACE_SIZE = eval_env.action_space.n
-    frame_stacker_eval = FrameStack(k=4) 
     
-    # Create agent with same state shape as training
-    temp_obs_eval, _ = eval_env.reset()
-    temp_state_eval = frame_stacker_eval.reset(temp_obs_eval)
-    STATE_SHAPE_EVAL = temp_state_eval.shape
+    # Create agent with correct state shape for PyTorch (channels first)
+    STATE_SHAPE_EVAL = (4, 84, 84)
 
     agent_eval = DoubleDQNAgent(
         state_shape=STATE_SHAPE_EVAL,
@@ -65,8 +62,7 @@ def evaluate_double_dqn_agent(env_name, model_path_to_load, num_episodes=10, hum
     # Run evaluation episodes
     total_rewards = []
     for episode in range(num_episodes):
-        obs, info = eval_env.reset(seed=random.randint(0, 1_000_000)) 
-        state = frame_stacker_eval.reset(obs)
+        state, info = eval_env.reset(seed=random.randint(0, 1_000_000)) 
         done = False
         episode_reward = 0
         steps = 0
@@ -74,10 +70,10 @@ def evaluate_double_dqn_agent(env_name, model_path_to_load, num_episodes=10, hum
         while not done:
             # Select greedy action (no exploration)
             action = agent_eval.act(state, explore=False) 
-            next_obs, reward, terminated, truncated, info = eval_env.step(action)
+            next_state, reward, terminated, truncated, info = eval_env.step(action)
             done = terminated or truncated
             
-            state = frame_stacker_eval.step(next_obs)
+            state = next_state
             episode_reward += reward
             steps += 1
             
@@ -152,16 +148,13 @@ def train_double_dqn_agent(human_render_during_training=False, load_checkpoint_f
     if 'ale_py' in globals() and hasattr(ale_py, '__version__'):
         gym.register_envs(ale_py)
     
-    # Create environment
-    env = gym.make(ENV_NAME, render_mode=train_render_mode, repeat_action_probability=0.0)
+    # Create properly wrapped environment
+    env = make_atari_env(ENV_NAME, render_mode=train_render_mode)
     ACTION_SPACE_SIZE = env.action_space.n
     print(f"Action space size: {ACTION_SPACE_SIZE}")
 
-    # Initialize frame stacker
-    frame_stacker = FrameStack(k=FRAMES_PER_STATE) 
-    temp_obs, _ = env.reset(seed=SEED)
-    temp_state = frame_stacker.reset(temp_obs)
-    STATE_SHAPE = temp_state.shape
+    # State shape is (4, 84, 84) for channels-first PyTorch input
+    STATE_SHAPE = (4, 84, 84)
 
     # Create Double DQN agent
     agent = DoubleDQNAgent(
@@ -214,22 +207,19 @@ def train_double_dqn_agent(human_render_during_training=False, load_checkpoint_f
     if not load_checkpoint_flag or agent.current_frames < WARMUP_STEPS : 
         print(f"Warming up replay buffer with random policy for {WARMUP_STEPS} steps...")
         warmup_seed = SEED - 1 if not load_checkpoint_flag else SEED + start_episode + agent.current_frames
-        obs_warmup, _ = env.reset(seed=warmup_seed) 
-        state_warmup = frame_stacker.reset(obs_warmup)
+        state_warmup, _ = env.reset(seed=warmup_seed) 
         frames_done_warmup = 0
         while frames_done_warmup < WARMUP_STEPS:
             action_warmup = env.action_space.sample()
-            next_obs_warmup, reward_warmup, terminated_warmup, truncated_warmup, _ = env.step(action_warmup)
+            next_state_warmup, reward_warmup, terminated_warmup, truncated_warmup, _ = env.step(action_warmup)
             done_warmup = terminated_warmup or truncated_warmup
             
-            next_state_warmup = frame_stacker.step(next_obs_warmup)
-            clipped_reward_warmup = np.sign(reward_warmup) 
-            replay_buffer.store((state_warmup, action_warmup, clipped_reward_warmup, next_state_warmup, float(done_warmup)))
+            # Reward is already clipped by our ClipRewardEnv wrapper
+            replay_buffer.store((state_warmup, action_warmup, reward_warmup, next_state_warmup, float(done_warmup)))
             
             if done_warmup:
                 warmup_seed += 1 
-                obs_warmup, _ = env.reset(seed=warmup_seed) 
-                state_warmup = frame_stacker.reset(obs_warmup)
+                state_warmup, _ = env.reset(seed=warmup_seed) 
             else:
                 state_warmup = next_state_warmup
             frames_done_warmup +=1
@@ -248,8 +238,7 @@ def train_double_dqn_agent(human_render_during_training=False, load_checkpoint_f
     # Main training loop
     for episode_num in range(start_episode, MAX_EPISODES + 1):
         episode_start_time = time.time()
-        obs, info = env.reset(seed=SEED + episode_num)
-        state = frame_stacker.reset(obs)
+        state, info = env.reset(seed=SEED + episode_num)
         done = False
         current_episode_reward = 0
         current_episode_steps = 0
@@ -266,16 +255,14 @@ def train_double_dqn_agent(human_render_during_training=False, load_checkpoint_f
 
             # Select and perform action
             action = agent.act(state) 
-            next_obs, reward, terminated, truncated, info = env.step(action)
+            next_state, reward, terminated, truncated, info = env.step(action)
             done = terminated or truncated
             
             if human_render_during_training:
                 env.render()
 
-            # Process transition
-            next_state = frame_stacker.step(next_obs)
-            clipped_reward = np.sign(reward) 
-            replay_buffer.store((state, action, clipped_reward, next_state, float(done)))
+            # Process transition - reward is already clipped by the ClipRewardEnv wrapper
+            replay_buffer.store((state, action, reward, next_state, float(done)))
 
             # Update state
             state = next_state

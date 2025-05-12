@@ -1,43 +1,19 @@
-# System Patterns: Pong (`PongNoFrameskip-v4`)
+# Pong Environment System Patterns
 
-This document details key implementation patterns and architectural decisions for the Pong environment.
+This document outlines the standard patterns and best practices to follow when working with the Pong environment in our RL implementations.
 
-## Structural Issues Identified
+## Environment Wrappers
 
-After implementing DQN, Double DQN, and PPO approaches with no success (all stuck at -21 reward), we identified several critical structural issues that were preventing successful learning:
-
-1. **Missing Atari Wrappers:**
-   * Our initial implementations lacked critical environment wrappers required for successful Atari learning:
-     * `NoopResetEnv`: Randomizes initial states by taking random no-ops on reset
-     * `MaxAndSkipEnv`: Performs frame skipping and max-pooling across frames
-     * `FireResetEnv`: Pong environment requires pressing FIRE to start
-     * `EpisodicLifeEnv`: Treats end-of-life as episode end (helps value estimation)
-
-2. **Observation Processing:**
-   * **Channel Order Issues**: PyTorch expects channels-first ordering (C, H, W), but our observations were channels-last (H, W, C)
-   * **Normalization**: Inconsistent normalization across implementations
-
-3. **Action Space Issues:**
-   * Pong only requires 3 meaningful actions (UP, DOWN, NOOP), but we were using all 6
-   * Full action space creates a larger exploration challenge
-
-4. **Hyperparameter Tuning:**
-   * Learning rates were often too high (causing instability) or too low (causing slow learning)
-   * Target network update frequency was inappropriate for the environment
-   * Buffer sizes and batch sizes were suboptimal
-
-## Correct Implementation Patterns
-
-Successful implementations should follow these patterns:
-
-### 1. Environment Setup
+The Pong environment MUST be properly wrapped with the following wrappers in this specific order:
 
 ```python
 def make_atari_env(env_id, render_mode=None, max_episode_steps=None):
     """Create a properly wrapped Atari environment."""
     env = gym.make(env_id, render_mode=render_mode, repeat_action_probability=0.0, full_action_space=False)
-    
-    # Apply wrappers in specific order
+    if max_episode_steps is not None:
+        env = gym.wrappers.TimeLimit(env, max_episode_steps=max_episode_steps)
+
+    # Apply wrappers in the standard order
     env = NoopResetEnv(env, noop_max=30)
     env = MaxAndSkipEnv(env, skip=4)
     if 'FIRE' in env.unwrapped.get_action_meanings():
@@ -45,73 +21,86 @@ def make_atari_env(env_id, render_mode=None, max_episode_steps=None):
     env = EpisodicLifeEnv(env)
     env = WarpFrame(env)
     env = ClipRewardEnv(env)
-    env = FrameStack(env, 4)
-    env = ScaledFloatFrame(env)
+    env = StackFrame(env, 4)
 
     return env
 ```
 
-### 2. Observation Processing
+### Critical Wrappers and Their Purpose
 
-* **Preprocessing Order:**
-  * Convert to grayscale → Resize to 84x84 → Normalize to [0, 1] → Stack frames
-  
-* **Correct Input Shape for PyTorch:** 
-  * Input shape should be (4, 84, 84) for 4 stacked frames (channels first)
-  * Convert observations if needed:
-  ```python
-  # Convert from (H, W, C) to (C, H, W) if needed
-  if len(state.shape) == 3 and state.shape[0] != input_shape[0]:
-      state = np.transpose(state, (2, 0, 1))
-  ```
+1. **NoopResetEnv**: Performs random number of no-op actions on reset to randomize initial state
+2. **MaxAndSkipEnv**: Applies frame skipping (4 frames) and max pooling
+3. **FireResetEnv**: ESSENTIAL for Pong - presses FIRE to start the game
+4. **EpisodicLifeEnv**: Treats loss of life as episode end for better value estimation
+5. **WarpFrame**: Resizes observations to 84x84 and converts to grayscale
+6. **ClipRewardEnv**: Clips rewards to {-1, 0, 1} for stable learning
+7. **StackFrame**: Stacks 4 frames together and converts to channels-first format
 
-### 3. Effective Hyperparameters
+## Tensor Handling
 
-For DQN-based approaches:
-* Learning rate: ~1e-4
-* Buffer size: 100,000-500,000 transitions
-* Target network update: Every 1,000-10,000 steps
-* Epsilon decay: Over 250,000-1,000,000 frames
+All neural network models MUST use PyTorch's channels-first format (C, H, W) for image inputs:
 
-For PPO:
-* Learning rate: 2.5e-4
-* Clip parameter: 0.1-0.2
-* GAE lambda: 0.95
-* Value coefficient: 0.5
-* Entropy coefficient: 0.01
-* PPO epochs per update: 4
-* Rollout length: 128-2048 steps
+```python
+# Ensure state has correct format (channels first for PyTorch)
+if len(state.shape) == 3 and state.shape[0] != self.state_shape[0]:
+    # Convert from (H, W, C) to (C, H, W) if needed
+    state = np.transpose(state, (2, 0, 1))
+```
 
-### 4. Training Patterns
+The standard state shape should be `(4, 84, 84)` for 4 stacked frames of 84x84 grayscale images.
 
-* **Episode Structure:**
-  * Use a fixed number of steps rather than episodes as the training metric
-  * Implement proper early stopping for terminal states
-  * Handle environment resets correctly (with FireReset for Pong)
+## Reward Handling
 
-* **Reward Handling:**
-  * Clip rewards to {-1, 0, 1} (done by ClipRewardEnv wrapper)
-  * For PPO, use proper Generalized Advantage Estimation (GAE)
+- All rewards should be clipped to {-1, 0, 1} using the ClipRewardEnv wrapper
+- For DQN implementations, rewards are already clipped by the wrapper
+- For PPO implementations, we use the raw rewards from the environment after wrapper preprocessing
 
-* **Visualization and Debugging:**
-  * Track policy entropy as a key metric (should start high and gradually decrease)
-  * Monitor loss values for signs of divergence or collapse
-  * Save and examine preprocessed frames to verify correct state representation
+## RL Algorithm Implementations
 
-## Implementation Results
+We maintain implementations of multiple RL algorithms for Pong:
 
-Our new implementations with these fixes:
+1. **DQN (Deep Q-Network)**:
+   - Standard architecture: 3 conv layers + 2 FC layers
+   - Uses experience replay buffer and target network
+   - Hyperparameters: γ=0.99, ε decay over 1M frames, target updates every 10K steps
 
-1. **Baselines-style Double DQN:**
-   * Properly implements the OpenAI Baselines approach to DQN
-   * Includes all standard Atari wrappers
-   * Uses correct PyTorch tensor shapes and processing
-   * Includes thorough visualization and monitoring
+2. **Double DQN**:
+   - Same architecture as DQN but with double Q-learning
+   - Helps reduce overestimation bias in Q-values
+   - Modified hyperparameters: lower learning rate, more frequent target updates
 
-2. **Fixed PPO:**
-   * Implements all standard PPO components with proper hyperparameters
-   * Includes channels-first ordering for PyTorch
-   * Uses correct advantage estimation and clipped surrogate objective
-   * Implements larger batch sizes and appropriate buffer sizes
+3. **PPO (Proximal Policy Optimization)**:
+   - Actor-critic architecture with shared feature extractor
+   - Uses GAE for advantage estimation
+   - Clip parameter: 0.2, multiple epochs per batch update
 
-The diagnostic tool helps identify preprocessing, observation shapes, and action space issues, confirming these were the root causes of learning failures in previous implementations.
+## File Structure
+
+Each implementation has a set of standard file components:
+
+1. **Utilities Module** (`pong_<algorithm>_utils.py`): 
+   - Contains environment wrappers
+   - Replay buffer or rollout buffer implementation
+   - Helper functions for data processing
+
+2. **Model Module** (`pong_<algorithm>_model.py`):
+   - Neural network architecture
+   - Agent class with act and learning methods
+   - Model saving/loading functionality
+
+3. **Training Module** (`pong_<algorithm>_train.py`):
+   - Training loop
+   - Evaluation function
+   - Hyperparameter settings
+
+4. **Visualization Module** (`pong_<algorithm>_vis.py`):
+   - Functions for plotting training progress
+   - Stats recording and visualization
+
+## Common Mistakes to Avoid
+
+1. **Not using FireResetEnv**: Pong requires pressing FIRE to start - without this, the agent will see no movement
+2. **Incorrect tensor dimensions**: Using channels-last format (H, W, C) instead of channels-first (C, H, W)
+3. **Improper hyperparameters**: Each algorithm requires specific hyperparameter tuning
+4. **Missing wrappers**: All wrappers are necessary for proper environment behavior
+5. **Overwriting frame stacking**: The StackFrame wrapper already provides stacked frames - no need for additional stacking

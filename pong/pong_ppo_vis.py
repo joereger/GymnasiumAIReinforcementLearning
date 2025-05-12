@@ -102,7 +102,7 @@ def plot_training_data(stats, filename="pong_ppo_progress.png"):
         'PPO Epochs: 4'
     ])
     props = dict(boxstyle='round', facecolor='wheat', alpha=0.3)
-    ax1.text(0.02, 0.05, textstr, transform=ax1.transaxes, fontsize=9,
+    ax1.text(0.02, 0.05, textstr, transform=ax1.transAxes, fontsize=9,
             verticalalignment='bottom', bbox=props)
     
     # Adjust layout

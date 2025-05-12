@@ -22,12 +22,13 @@ This simplifies learning significantly as the agent only needs to control vertic
 The Pong environment MUST be properly wrapped with the following wrappers in this specific order:
 
 ```python
-def make_atari_env(env_id, render_mode=None, max_episode_steps=None, reduced_actions=True):
-    """Create a properly wrapped Atari environment."""
+def make_pong_env(env_id="PongNoFrameskip-v4", render_mode=None, reduced_actions=True, seed=None):
+    """Create a preprocessed Pong environment with all necessary wrappers."""
     env = gym.make(env_id, render_mode=render_mode, repeat_action_probability=0.0, full_action_space=False)
-    if max_episode_steps is not None:
-        env = gym.wrappers.TimeLimit(env, max_episode_steps=max_episode_steps)
-
+    
+    if seed is not None:
+        env.seed(seed)
+        
     # Apply wrappers in the standard order
     env = NoopResetEnv(env, noop_max=30)
     env = MaxAndSkipEnv(env, skip=4)
@@ -36,12 +37,13 @@ def make_atari_env(env_id, render_mode=None, max_episode_steps=None, reduced_act
     env = EpisodicLifeEnv(env)
     env = WarpFrame(env)
     env = ClipRewardEnv(env)
-    env = StackFrame(env, 4)
+    env = FrameStack(env, 4)
+    env = ChannelsFirstImageShape(env)  # PyTorch uses CHW format
+    env = ScaledFloatFrame(env)
     
-    # Reduce action space to simplify learning (default True)
     if reduced_actions:
         env = ReducedActionSpace(env)
-
+    
     return env
 ```
 
@@ -53,16 +55,70 @@ def make_atari_env(env_id, render_mode=None, max_episode_steps=None, reduced_act
 4.  **EpisodicLifeEnv**: Treats loss of life as episode end for better value estimation.
 5.  **WarpFrame**: Resizes observations to 84x84 and converts to grayscale.
 6.  **ClipRewardEnv**: Clips rewards to {-1, 0, 1} for stable learning.
-7.  **StackFrame**: Stacks 4 frames together and converts to channels-first format `(4, 84, 84)` normalized to `[0, 1]`.
-8.  **ReducedActionSpace**: Reduces action space to 3 essential actions (STAY, UP, DOWN).
+7.  **FrameStack**: Stacks 4 frames together.
+8.  **ChannelsFirstImageShape**: Converts to channels-first format (4, 84, 84).
+9.  **ScaledFloatFrame**: Normalizes pixel values to [0, 1].
+10. **ReducedActionSpace**: Reduces action space to 3 essential actions (STAY, UP, DOWN).
 
 ## Tensor Handling
 
-All neural network models MUST use PyTorch's channels-first format `(4, 84, 84)` for image inputs. The `StackFrame` wrapper handles this.
+All neural network models MUST use PyTorch's channels-first format `(4, 84, 84)` for image inputs. The `ChannelsFirstImageShape` wrapper handles this conversion.
 
-## DQN Hyperparameters (Simplified Baseline)
+## PPO Implementation (Current Approach)
 
-For a barebones DQN implementation aimed at verifying basic learning:
+We are currently using PPO (Proximal Policy Optimization) as our primary algorithm, which has shown better stability and sample efficiency than DQN for this environment.
+
+### PPO Hyperparameters
+
+Standard PPO hyperparameters for Pong:
+
+```python
+# PPO hyperparameters
+learning_rate = 2.5e-4
+gamma = 0.99
+gae_lambda = 0.95
+clip_epsilon = 0.2
+value_coef = 0.5
+entropy_coef = 0.01
+max_grad_norm = 0.5
+rollout_steps = 128
+n_epochs = 4
+batch_size = 64
+total_timesteps = 1_000_000
+```
+
+### Key PPO Components
+
+1. **Actor-Critic Architecture**: Using a shared CNN backbone with separate policy (actor) and value (critic) heads.
+2. **Generalized Advantage Estimation (GAE)**: For more stable advantage calculation.
+3. **PPO Clipping**: Restricts policy updates to prevent destructively large updates.
+4. **Entropy Regularization**: Encourages exploration by penalizing overly deterministic policies.
+5. **Multiple Epochs**: Running several optimization passes per rollout for better sample efficiency.
+
+### Rollout Collection
+
+PPO collects experience in rollouts (typically 128 steps) rather than using a replay buffer:
+
+```python
+# Collect rollout
+rollout = collect_rollout(
+    env=env,
+    agent=agent,
+    ppo=ppo,
+    rollout_steps=args.rollout_steps
+)
+
+# Update agent with multiple optimization epochs
+loss_metrics = ppo.update(
+    rollout=rollout,
+    n_epochs=4,
+    batch_size=64
+)
+```
+
+## DQN Hyperparameters (Alternative Approach)
+
+For DQN implementations (now a secondary approach):
 
 *   `LEARNING_RATE = 2.5e-4`
 *   `BATCH_SIZE = 32`
@@ -80,13 +136,25 @@ For a barebones DQN implementation aimed at verifying basic learning:
 
 When evaluating trained models:
 
-1.  Use `explore=False` in `agent.act()` for a greedy policy, but be aware this can perform poorly if the Q-values are not well-learned.
-2.  Consider using a small `eval_epsilon` (e.g., 0.05) during evaluation to allow some exploration, which can give a more robust measure of performance, especially for partially trained agents.
-3.  Ensure the evaluation environment uses the same wrappers as the training environment, including `ReducedActionSpace`.
+1. **Deterministic vs Stochastic Policy**:
+   - For PPO, use `deterministic=True` in `agent.get_action()` for evaluation.
+   - For DQN, use `explore=False` in `agent.act()` for a greedy policy.
+
+2. **Limited Exploration**: Consider using a small exploration rate (epsilon=0.05) during evaluation to get a more realistic measure of performance, especially for partially trained agents.
+
+3. **Standard Evaluation Protocol**:
+   - Evaluate every 10,000 training steps
+   - Run at least 5 episodes per evaluation
+   - Report mean and standard deviation of rewards
+   - Save training curves and visualizations
+
+4. **Consistent Environment**: Ensure the evaluation environment uses the same wrappers as the training environment, including `ReducedActionSpace`.
 
 ## Common Mistakes to Avoid
 
-1.  **Not using FireResetEnv**: Pong requires pressing FIRE to start.
-2.  **Incorrect tensor dimensions**: Ensure PyTorch models receive `(C, H, W)` format.
-3.  **Using all 6 actions**: The reduced 3-action space is crucial for efficient learning.
-4.  **Missing wrappers**: All listed wrappers play a role.
+1. **Not using FireResetEnv**: Pong requires pressing FIRE to start.
+2. **Incorrect tensor dimensions**: Ensure PyTorch models receive `(C, H, W)` format.
+3. **Using all 6 actions**: The reduced 3-action space is crucial for efficient learning.
+4. **Missing wrappers**: All listed wrappers play a role.
+5. **PPO-specific**: Not normalizing advantages can lead to unstable learning.
+6. **PPO-specific**: Using too short rollouts reduces learning signal quality.

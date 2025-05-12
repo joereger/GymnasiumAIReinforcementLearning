@@ -233,25 +233,8 @@ class ScaledFloatFrame(gym.ObservationWrapper):
         # Careful! This undoes the memory optimization of FrameStack
         return np.array(observation).astype(np.float32) / 255.0
 
-# --- Helper Functions ---
-def make_atari_env(env_id, render_mode=None, max_episode_steps=None):
-    """Create a properly wrapped Atari environment."""
-    env = gym.make(env_id, render_mode=render_mode, repeat_action_probability=0.0, full_action_space=False)
-    if max_episode_steps is not None:
-        env = gym.wrappers.TimeLimit(env, max_episode_steps=max_episode_steps)
-
-    # Apply wrappers in the standard order
-    env = NoopResetEnv(env, noop_max=30)
-    env = MaxAndSkipEnv(env, skip=4)
-    if 'FIRE' in env.unwrapped.get_action_meanings():
-        env = FireResetEnv(env)
-    env = EpisodicLifeEnv(env)
-    env = WarpFrame(env)
-    env = ClipRewardEnv(env)
-    env = FrameStack(env, 4)
-    env = ScaledFloatFrame(env)
-
-    return env
+# Import make_pong_env from our wrappers module
+from pong_env_wrappers import make_pong_env
 
 def visualize_preprocessed_frames(frames, orig_frame=None, title="Preprocessed Frames"):
     """Visualize the preprocessed frames to debug what the agent sees."""
@@ -430,8 +413,11 @@ def main():
     print("=" * 80)
     print("\nThis script will diagnose potential issues in the Pong environment implementation.")
     
-    # Print action meanings for understanding
+    # Create a temporary environment to get action meanings, ensuring ALE is registered
+    gym.register_envs(ale_py)
+    print(f"Attempting to create temporary environment for action meanings: PongNoFrameskip-v4")
     env_temp = gym.make("PongNoFrameskip-v4")
+            
     action_meanings = env_temp.unwrapped.get_action_meanings()
     env_temp.close()
     
@@ -439,9 +425,9 @@ def main():
     for i, meaning in enumerate(action_meanings):
         print(f"Action {i}: {meaning}")
     
-    # Create properly wrapped environment
-    print("\nCreating properly wrapped Atari environment...")
-    env = make_atari_env("PongNoFrameskip-v4", render_mode=render_mode)
+    # Create properly wrapped environment using our robust function
+    print("\nCreating properly wrapped Pong environment...")
+    env = make_pong_env(render_mode=render_mode, reduced_actions=False)
     
     # Print environment information
     print(f"\nObservation Space: {env.observation_space}")

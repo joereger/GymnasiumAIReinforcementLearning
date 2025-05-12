@@ -5,12 +5,15 @@ This document tracks our progress implementing Reinforcement Learning algorithms
 ## Current State (Last Updated: 5/11/2025)
 
 - **Environment**: `PongNoFrameskip-v4`
-- **Status**: Resolved critical implementation issues in both DQN and PPO approaches 
-- **Best Performance**: PPO shows promising results, DQN fixed with proper wrappers
+- **Status**: Pivoted from DQN to PPO (Proximal Policy Optimization)
+- **Primary Approach**: PPO with Actor-Critic architecture and GAE
+- **Secondary Approach**: DQN implementation fixed but not actively developed
+- **Best Performance**: Preparing for full PPO training runs
+- **Environment Wrapper Module**: Consolidated all wrappers into `pong_env_wrappers.py`
 
 ## Implementation Timeline
 
-### Initial Implementation (Problematic)
+### Initial DQN Implementation (Earlier work)
 
 - Implemented standard DQN architecture
 - Used 4-frame stacking and epsilon-greedy exploration
@@ -28,32 +31,70 @@ This document tracks our progress implementing Reinforcement Learning algorithms
   - MaxAndSkipEnv
 - Discovered incorrect channels ordering
 
-### Fixed Implementations
+### DQN Improvements
 
-1. **Fixed DQN**: 
-   - Added all essential Atari wrappers
-   - Corrected tensor dimension ordering (channels-first for PyTorch)
-   - Implemented proper preprocessing pipeline
-   - State: Ready for training
+- Added all essential Atari wrappers
+- Corrected tensor dimension ordering (channels-first for PyTorch)
+- Implemented proper preprocessing pipeline
+- Reduced action space from 6 to 3 actions
+- Created extensive DQN debugging tools
+- **Result**: Fixed implementation showed initial learning but had stability issues
 
-2. **PPO Implementation**:
-   - Implemented PPO with proper GAE advantage estimation
-   - Added proper Atari wrappers
-   - Corrected tensor dimension handling
-   - State: Training successfully
+### Current PPO Implementation (5/11/2025)
+
+- Consolidated environment wrappers into dedicated module (`pong_env_wrappers.py`)
+- Implemented complete PPO architecture with Actor-Critic network
+- Added Generalized Advantage Estimation (GAE)
+- Implemented clipped surrogate objective
+- Added entropy regularization
+- Created comprehensive training, evaluation, and visualization tools:
+  - `pong_ppo_model.py`: Model architecture and algorithm
+  - `pong_ppo_train.py`: Training loop and infrastructure
+  - `pong_ppo_vis.py`: Visualization and analysis tools
+- Added policy attention visualization capabilities
+
+## PPO Architecture Overview
+
+1. **Environment Preparation**:
+   - Same Atari wrappers as DQN
+   - Reduced action space (3 actions)
+   - Channels-first tensor format
+
+2. **Policy Network**:
+   - Shared CNN backbone (3 convolutional layers)
+   - Separate actor (policy) and critic (value) heads
+   - Handles stacked frames (4x84x84)
+
+3. **Training Infrastructure**:
+   - 128-step rollouts for experience collection
+   - Multiple optimization epochs per rollout
+   - Advantage normalization
+   - Regular evaluation and model saving
+   - Visualization of training progress
 
 ## Next Steps
 
-1. **Run Extended Training**:
-   - Train both implementations for 1-2M frames
-   - Evaluate training stability and final performance
-   - Compare learning curves
+1. **Initial PPO Training**:
+   - Run PPO for 1M timesteps with default hyperparameters
+   - Monitor learning progress and stability
+   - Expected early learning within 100k-200k steps
 
-2. **Optimization Exploration**:
-   - Experiment with reduced action space (6 vs 3 actions)
-   - Test different hyperparameter settings
-   - Explore frame skipping settings
+2. **Hyperparameter Tuning**:
+   - Experiment with rollout length
+   - Adjust entropy coefficient
+   - Test different learning rates
 
-3. **Documentation**:
-   - Update approach comparisons with quantitative results
-   - Prepare visualization of learning progress
+3. **Performance Analysis**:
+   - Compare against DQN (if applicable)
+   - Analyze policy attention maps
+   - Generate training curves
+
+4. **Potential Enhancements**:
+   - Test larger network architectures
+   - Experiment with curiosity-driven exploration
+   - Consider self-supervised auxiliary tasks
+
+5. **Documentation**:
+   - Update memory bank with quantitative results
+   - Document PPO advantages for Pong environment
+   - Create demonstration videos of trained agent

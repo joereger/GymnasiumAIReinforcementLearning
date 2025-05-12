@@ -1,11 +1,15 @@
+"""
+Environment wrappers for Pong based on the Atari literature standards.
+These wrappers preprocess observations and adapt the environment for RL algorithms.
+"""
+
+import gymnasium as gym
 import numpy as np
 import cv2
-import gymnasium as gym
 from collections import deque
-import random
-import time
+import torch
+import ale_py # Import ale_py
 
-# --- Atari Wrappers ---
 class NoopResetEnv(gym.Wrapper):
     """
     Sample initial states by taking random number of no-ops on reset.
@@ -56,7 +60,6 @@ class FireResetEnv(gym.Wrapper):
 class EpisodicLifeEnv(gym.Wrapper):
     """
     Make end-of-life == end-of-episode, but only reset on true game over.
-    Done by DeepMind for the DQN and co. since it helps value estimation.
     """
     def __init__(self, env):
         super(EpisodicLifeEnv, self).__init__(env)
@@ -168,77 +171,107 @@ class WarpFrame(gym.ObservationWrapper):
             obs = np.expand_dims(obs, -1)
         return obs
 
-class StackFrame(gym.Wrapper):
+class FrameStack(gym.Wrapper):
     """
-    Stack the last k frames together and convert to pytorch format (channels first)
+    Stack k last frames.
+    Returns lazy array, which is much more memory efficient.
     """
-    def __init__(self, env, k=4):
-        super(StackFrame, self).__init__(env)
+    def __init__(self, env, k):
+        super(FrameStack, self).__init__(env)
         self.k = k
         self.frames = deque([], maxlen=k)
         shp = env.observation_space.shape
-        # Update observation space to have proper channels-first shape for PyTorch
         self.observation_space = gym.spaces.Box(
             low=0,
-            high=1.0,
-            shape=(k, shp[0], shp[1]),  # (channels, height, width)
-            dtype=np.float32,
+            high=255,
+            shape=(shp[0], shp[1], shp[2] * k),
+            dtype=env.observation_space.dtype,
         )
 
     def reset(self, **kwargs):
         obs, info = self.env.reset(**kwargs)
         for _ in range(self.k):
-            self.frames.append(self._process_frame(obs))
-        return self._get_stacked_obs(), info
+            self.frames.append(obs)
+        return self._get_ob(), info
 
     def step(self, action):
         obs, reward, terminated, truncated, info = self.env.step(action)
-        self.frames.append(self._process_frame(obs))
-        return self._get_stacked_obs(), reward, terminated, truncated, info
+        self.frames.append(obs)
+        return self._get_ob(), reward, terminated, truncated, info
 
-    def _process_frame(self, frame):
-        # Extract the single channel if grayscale and normalize
-        if frame.shape[-1] == 1:  # Check if it has a single channel dimension at the end
-            frame = frame.squeeze(-1)  # Remove the channel dimension
-        return frame.astype(np.float32) / 255.0
+    def _get_ob(self):
+        assert len(self.frames) == self.k
+        return np.concatenate(list(self.frames), axis=2)
 
-    def _get_stacked_obs(self):
-        # Stack frames along first dimension (channels first for PyTorch)
-        return np.stack(list(self.frames), axis=0)
+class ChannelsFirstImageShape(gym.ObservationWrapper):
+    """
+    Transpose observation from HWC to CHW format, specifically for PyTorch.
+    """
+    def __init__(self, env):
+        super(ChannelsFirstImageShape, self).__init__(env)
+        old_shape = self.observation_space.shape
+        new_shape = (old_shape[2], old_shape[0], old_shape[1])
+        self.observation_space = gym.spaces.Box(
+            low=0, 
+            high=255, 
+            shape=new_shape, 
+            dtype=np.uint8
+        )
+
+    def observation(self, observation):
+        return np.transpose(observation, (2, 0, 1))
+        
+class ScaledFloatFrame(gym.ObservationWrapper):
+    """Normalize observations to [0, 1]."""
+    def __init__(self, env):
+        super(ScaledFloatFrame, self).__init__(env)
+        self.observation_space = gym.spaces.Box(
+            low=0, 
+            high=1, 
+            shape=env.observation_space.shape, 
+            dtype=np.float32
+        )
+
+    def observation(self, observation):
+        return np.array(observation).astype(np.float32) / 255.0
 
 class ReducedActionSpace(gym.ActionWrapper):
     """
-    Reduces the action space to only 3 relevant actions for Pong:
-    NOOP (0), RIGHT/UP (2), LEFT/DOWN (3)
-    
-    This simplifies learning since the agent only needs to control
-    vertical paddle movement.
+    Reduce the action space for Pong from 6 to 3 actions.
+    The 3 actions are: NOOP(0), RIGHT(2), LEFT(3)
+    These correspond to STAY, PADDLE UP, PADDLE DOWN in Pong.
     """
     def __init__(self, env):
         super(ReducedActionSpace, self).__init__(env)
-        # Original actions: NOOP(0), FIRE(1), RIGHT(2), LEFT(3), RIGHTFIRE(4), LEFTFIRE(5)
-        # For Pong:
-        # - RIGHT (2) moves paddle UP
-        # - LEFT (3) moves paddle DOWN
-        # - NOOP (0) keeps paddle in place
-        self.valid_actions = [0, 2, 3]  # [STAY, UP, DOWN]
+        self.valid_actions = [0, 2, 3]  # NOOP, RIGHT, LEFT
         self.action_space = gym.spaces.Discrete(len(self.valid_actions))
-        
-        # Store action meanings for debugging
-        self.action_meanings = env.unwrapped.get_action_meanings()
-        print(f"Reduced action space from {len(self.action_meanings)} to {len(self.valid_actions)} actions")
-        print(f"Using actions: {[self.action_meanings[a] for a in self.valid_actions]}")
-    
+        print(f"Reduced action space from {len(env.unwrapped.get_action_meanings())} to {len(self.valid_actions)} actions")
+        print(f"Using actions: {[env.unwrapped.get_action_meanings()[a] for a in self.valid_actions]}")
+
     def action(self, action):
-        """Map the reduced action index to the original action."""
         return self.valid_actions[action]
 
-def make_atari_env(env_id, render_mode=None, max_episode_steps=None, reduced_actions=True):
-    """Create a properly wrapped Atari environment."""
+def make_pong_env(env_id="PongNoFrameskip-v4", render_mode=None, reduced_actions=True, seed=None):
+    """
+    Create a preprocessed Pong environment with all necessary wrappers.
+    This version directly uses the specified env_id, defaulting to "PongNoFrameskip-v4".
+    
+    Args:
+        env_id: Environment ID (should be "PongNoFrameskip-v4")
+        render_mode: Rendering mode (None or "human")
+        reduced_actions: Whether to reduce action space to 3 actions
+        seed: Random seed
+        
+    Returns:
+        Wrapped gymnasium environment
+    """
+    # Ensure ALE environments are registered
+    gym.register_envs(ale_py)
+    print(f"Attempting to create environment: {env_id}")
     env = gym.make(env_id, render_mode=render_mode, repeat_action_probability=0.0, full_action_space=False)
-    if max_episode_steps is not None:
-        env = gym.wrappers.TimeLimit(env, max_episode_steps=max_episode_steps)
-
+    
+    # Seeding will be handled by env.reset(seed=seed) in the training/evaluation scripts
+        
     # Apply wrappers in the standard order
     env = NoopResetEnv(env, noop_max=30)
     env = MaxAndSkipEnv(env, skip=4)
@@ -247,38 +280,15 @@ def make_atari_env(env_id, render_mode=None, max_episode_steps=None, reduced_act
     env = EpisodicLifeEnv(env)
     env = WarpFrame(env)
     env = ClipRewardEnv(env)
-    env = StackFrame(env, 4)
+    env = FrameStack(env, 4)
+    env = ChannelsFirstImageShape(env)  # PyTorch uses CHW format
+    env = ScaledFloatFrame(env)
     
-    # Optionally reduce action space to simplify learning
     if reduced_actions:
         env = ReducedActionSpace(env)
-
+    
     return env
 
-# --- Replay Buffer ---
-class ReplayBuffer:
-    """Store and sample transitions for DQN training."""
-    def __init__(self, size=int(1e5)):
-        self.buffer = deque(maxlen=size)
-
-    def store(self, transition):
-        """Store a transition (state, action, reward, next_state, done)."""
-        self.buffer.append(transition)
-
-    def sample(self, batch_size=32):
-        """Sample a batch of transitions randomly."""
-        if len(self.buffer) < batch_size:
-            return []
-        return random.sample(self.buffer, batch_size)
-
-    def __len__(self):
-        """Return the current size of the buffer."""
-        return len(self.buffer)
-
-# --- Helper to format time ---
-def format_time(seconds):
-    """Format seconds into a human-readable HH:MM:SS string."""
-    hours = int(seconds // 3600)
-    minutes = int((seconds % 3600) // 60)
-    secs = int(seconds % 60)
-    return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+# Get appropriate device for PyTorch
+device = torch.device("mps" if torch.backends.mps.is_available() else 
+                     "cuda" if torch.cuda.is_available() else "cpu")

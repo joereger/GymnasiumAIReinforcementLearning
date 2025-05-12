@@ -268,7 +268,24 @@ def make_pong_env(env_id="PongNoFrameskip-v4", render_mode=None, reduced_actions
     # Ensure ALE environments are registered
     gym.register_envs(ale_py)
     print(f"Attempting to create environment: {env_id}")
-    env = gym.make(env_id, render_mode=render_mode, repeat_action_probability=0.0, full_action_space=False)
+    
+    # Create environment with sound disabled
+    if render_mode == "human":
+        print("Creating environment with sound disabled")
+    
+    env = gym.make(
+        env_id, 
+        render_mode=render_mode, 
+        repeat_action_probability=0.0, 
+        full_action_space=False,
+        disable_env_checker=True
+    )
+    
+    # Attempt to disable sound through ALE interface
+    if hasattr(env.unwrapped, 'ale'):
+        if hasattr(env.unwrapped.ale, 'setInt'):
+            env.unwrapped.ale.setInt('sound', 0)  # Turn off sound
+            # The display_screen setting is not available in this ALE version
     
     # Seeding will be handled by env.reset(seed=seed) in the training/evaluation scripts
         

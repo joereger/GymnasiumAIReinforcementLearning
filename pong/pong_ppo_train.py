@@ -22,14 +22,12 @@ def parse_args():
                         help="Random seed")
     parser.add_argument("--rollout-steps", type=int, default=128,
                         help="Number of steps per rollout")
-    parser.add_argument("--eval-freq", type=int, default=10_000,
-                        help="Evaluation frequency (in timesteps)")
-    parser.add_argument("--save-freq", type=int, default=100_000,
-                        help="Model saving frequency (in timesteps)")
+    parser.add_argument("--eval-freq", type=int, default=10,
+                        help="Evaluation frequency (in episodes)")
+    parser.add_argument("--save-freq", type=int, default=50,
+                        help="Model saving frequency (in episodes)")
     parser.add_argument("--render", action="store_true",
                         help="Render environment during evaluation")
-    parser.add_argument("--log-freq", type=int, default=1000,
-                        help="Logging frequency (in timesteps)")
     parser.add_argument("--lr", type=float, default=2.5e-4,
                         help="Learning rate")
     parser.add_argument("--load-model", type=str, default=None,
@@ -46,7 +44,8 @@ def collect_rollout(env, agent, ppo, rollout_steps, render=False, seed=None):
         agent: Actor-critic agent
         ppo: PPO algorithm object
         rollout_steps: Number of steps to collect
-        render: Whether to render the environment
+        render: Whether to render the environment during collection
+        seed: Random seed for environment resets
         
     Returns:
         rollout: Dictionary of collected experience
@@ -65,6 +64,9 @@ def collect_rollout(env, agent, ppo, rollout_steps, render=False, seed=None):
     
     # Collect rollout
     for _ in range(rollout_steps):
+        # Render if requested - for environments with render_mode="human"
+        if render and hasattr(env, 'render'):
+            env.render()
         # Get action, log prob, and value
         with torch.no_grad():
             action, log_prob, value = agent.get_action(state_tensor)
@@ -164,33 +166,123 @@ def evaluate_agent(env, agent, num_episodes=5, render=False, epsilon=0.0):
     
     return avg_reward, avg_length
 
-def visualize_training_progress(timesteps, rewards, eval_freq, filename="pong_ppo_training_progress.png"):
+def visualize_training_progress(training_data, filename="pong_ppo_training_progress.png"):
     """
-    Visualize and save training progress as a plot.
+    Visualize and save training progress as a multi-panel plot.
     
     Args:
-        timesteps: List of timesteps
-        rewards: List of corresponding rewards
-        eval_freq: Evaluation frequency (for x-axis)
+        training_data: Dictionary containing training metrics
         filename: Output file name
     """
-    plt.figure(figsize=(12, 6))
-    plt.plot(timesteps, rewards, 'b-', linewidth=2)
-    plt.title('PPO Training Progress on Pong')
-    plt.xlabel('Timesteps')
-    plt.ylabel('Average Episode Reward')
-    plt.grid(True)
+    if len(training_data['episodes']) == 0:
+        return  # Nothing to plot yet
+        
+    # Create a multi-panel figure
+    fig, axs = plt.subplots(3, 2, figsize=(15, 12))
+    fig.suptitle('PPO Training Progress on Pong', fontsize=16)
+    
+    # Episode rewards
+    axs[0, 0].plot(training_data['episodes'], training_data['rewards'], 'b-', linewidth=2, label='Episode Reward')
+    axs[0, 0].set_title('Episode Rewards')
+    axs[0, 0].set_xlabel('Episode')
+    axs[0, 0].set_ylabel('Reward')
+    axs[0, 0].legend(loc='best')
+    axs[0, 0].grid(True)
+    
+    # Episode lengths
+    axs[0, 1].plot(training_data['episodes'], training_data['lengths'], 'r-', linewidth=2, label='Episode Length')
+    axs[0, 1].set_title('Episode Lengths')
+    axs[0, 1].set_xlabel('Episode')
+    axs[0, 1].set_ylabel('Steps')
+    axs[0, 1].legend(loc='best')
+    axs[0, 1].grid(True)
+    
+    # Policy loss
+    axs[1, 0].plot(training_data['episodes'], training_data['policy_losses'], 'g-', linewidth=2, label='Policy Loss')
+    axs[1, 0].set_title('Policy Loss')
+    axs[1, 0].set_xlabel('Episode')
+    axs[1, 0].set_ylabel('Loss')
+    axs[1, 0].legend(loc='best')
+    axs[1, 0].grid(True)
+    
+    # Value loss
+    axs[1, 1].plot(training_data['episodes'], training_data['value_losses'], 'm-', linewidth=2, label='Value Loss')
+    axs[1, 1].set_title('Value Loss')
+    axs[1, 1].set_xlabel('Episode')
+    axs[1, 1].set_ylabel('Loss')
+    axs[1, 1].legend(loc='best')
+    axs[1, 1].grid(True)
+    
+    # Entropy
+    axs[2, 0].plot(training_data['episodes'], training_data['entropies'], 'c-', linewidth=2, label='Entropy')
+    axs[2, 0].set_title('Entropy')
+    axs[2, 0].set_xlabel('Episode')
+    axs[2, 0].set_ylabel('Entropy')
+    axs[2, 0].legend(loc='best')
+    axs[2, 0].grid(True)
+    
+    # Cumulative training time
+    axs[2, 1].plot(training_data['episodes'], training_data['cumulative_time'], 'y-', linewidth=2, label='Training Time')
+    axs[2, 1].set_title('Cumulative Training Time')
+    axs[2, 1].set_xlabel('Episode')
+    axs[2, 1].set_ylabel('Time (seconds)')
+    axs[2, 1].legend(loc='best')
+    axs[2, 1].grid(True)
+    
+    # Adjust layout
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
     
     # Save the plot
     os.makedirs('data/pong', exist_ok=True)
     plt.savefig(os.path.join('data/pong', filename))
     plt.close()
-
-def train_ppo():
-    """Main training function for PPO on Pong."""
-    # Parse arguments
-    args = parse_args()
     
+    # Create a combined plot with all metrics normalized
+    plt.figure(figsize=(15, 8))
+    
+    # Normalize all metrics to 0-1 range for better comparison
+    episodes = training_data['episodes']
+    
+    def normalize(data):
+        if len(data) == 0 or max(data) == min(data):  
+            return np.zeros_like(data) if len(data) > 0 else []
+        return (data - min(data)) / (max(data) - min(data))
+    
+    # Get normalized data
+    norm_rewards = normalize(np.array(training_data['rewards']))
+    norm_lengths = normalize(np.array(training_data['lengths']))
+    norm_policy_losses = normalize(np.array(training_data['policy_losses']))
+    norm_value_losses = normalize(np.array(training_data['value_losses']))
+    norm_entropies = normalize(np.array(training_data['entropies']))
+    
+    # Plot all metrics together
+    plt.plot(episodes, norm_rewards, 'b-', linewidth=2, label='Reward')
+    plt.plot(episodes, norm_lengths, 'r-', linewidth=2, label='Length')
+    plt.plot(episodes, norm_policy_losses, 'g-', linewidth=2, label='Policy Loss')
+    plt.plot(episodes, norm_value_losses, 'm-', linewidth=2, label='Value Loss')
+    plt.plot(episodes, norm_entropies, 'c-', linewidth=2, label='Entropy')
+    
+    # Add legend, title, and labels
+    plt.legend(loc='best')
+    plt.title('All Training Metrics (Normalized)', fontsize=16)
+    plt.xlabel('Episode', fontsize=14)
+    plt.ylabel('Normalized Value', fontsize=14)
+    plt.grid(True)
+    
+    # Save the combined plot
+    plt.savefig(os.path.join('data/pong', 'pong_combined_metrics.png'))
+    plt.close()
+
+def train_ppo(env, eval_env, args, train_render=False):
+    """
+    Main training function for PPO on Pong.
+    
+    Args:
+        env: Training environment
+        eval_env: Evaluation environment
+        args: Command line arguments
+        train_render: Whether to render during training
+    """
     # Set up logging directory
     log_dir = os.path.join('data', 'pong')
     os.makedirs(log_dir, exist_ok=True)
@@ -204,10 +296,6 @@ def train_ppo():
     elif torch.cuda.is_available():
         torch.cuda.manual_seed_all(args.seed)
     np.random.seed(args.seed)
-    
-    # Create environment using robust environment creation function
-    env = make_pong_env(reduced_actions=True, seed=args.seed)
-    eval_env = make_pong_env(reduced_actions=True, seed=args.seed + 1000)
     
     # Get environment info
     obs_shape = env.observation_space.shape
@@ -243,10 +331,29 @@ def train_ppo():
     timesteps = []
     eval_rewards = []
     episode_rewards = []
+    episode_lengths = []
+    episode_times = []
+    policy_losses = []
+    value_losses = []
+    entropies = []
     
-    # For tracking recent rewards
-    recent_rewards = deque(maxlen=10)
+    # For tracking data to save to JSON
+    training_data = {
+        'episodes': [],
+        'rewards': [],
+        'lengths': [],
+        'times': [],
+        'policy_losses': [],
+        'value_losses': [],
+        'entropies': [],
+        'cumulative_time': [],
+        'timesteps': []
+    }
+    
+    # For tracking current episode
     current_episode_reward = 0
+    current_episode_length = 0
+    episode_start_time = time.time()
     
     # Start timer
     start_time = time.time()
@@ -255,16 +362,20 @@ def train_ppo():
     total_timesteps = 0
     updates = 0
     episodes = 0
+    episode_policy_losses = []
+    episode_value_losses = []
+    episode_entropies = []
     
     print("Starting PPO training...")
     
     while total_timesteps < args.total_timesteps:
-        # Collect rollout
+        # Collect rollout, passing train_render
         rollout = collect_rollout(
             env=env,
             agent=agent,
             ppo=ppo,
-            rollout_steps=args.rollout_steps
+            rollout_steps=args.rollout_steps,
+            render=train_render
         )
         
         # Update agent
@@ -278,34 +389,79 @@ def train_ppo():
         total_timesteps += args.rollout_steps
         updates += 1
         
-        # Track episode completion
+        # Track episode completion and update metrics
         for i, done in enumerate(rollout['dones']):
             current_episode_reward += rollout['rewards'][i]
+            current_episode_length += 1
+            episode_policy_losses.append(loss_metrics['policy_loss'])
+            episode_value_losses.append(loss_metrics['value_loss'])
+            episode_entropies.append(loss_metrics['entropy'])
+            
             if done:
                 episodes += 1
-                recent_rewards.append(current_episode_reward)
                 episode_rewards.append(current_episode_reward)
+                episode_lengths.append(current_episode_length)
+                episode_end_time = time.time()
+                episode_duration = episode_end_time - episode_start_time
+                episode_times.append(episode_duration)
+                cumulative_time = time.time() - start_time
+                
+                # Calculate average metrics for this episode
+                avg_policy_loss = np.mean(episode_policy_losses)
+                avg_value_loss = np.mean(episode_value_losses)
+                avg_entropy = np.mean(episode_entropies)
+                
+                # Save metrics for this episode
+                policy_losses.append(avg_policy_loss)
+                value_losses.append(avg_value_loss)
+                entropies.append(avg_entropy)
+                
+                # Add to JSON data
+                training_data['episodes'].append(episodes)
+                training_data['rewards'].append(float(current_episode_reward))
+                training_data['lengths'].append(int(current_episode_length))
+                training_data['times'].append(float(episode_duration))
+                training_data['policy_losses'].append(float(avg_policy_loss))
+                training_data['value_losses'].append(float(avg_value_loss))
+                training_data['entropies'].append(float(avg_entropy))
+                training_data['cumulative_time'].append(float(cumulative_time))
+                training_data['timesteps'].append(int(total_timesteps))
+                
+                # Log every episode completion - single line output
+                fps = total_timesteps / cumulative_time
+                print(f"Episode {episodes:4d} | Reward: {current_episode_reward:6.1f} | Length: {current_episode_length:4d} | Policy: {avg_policy_loss:.4f} | Value: {avg_value_loss:.4f} | Entropy: {avg_entropy:.4f} | Time: {cumulative_time:.1f}s | FPS: {fps:.1f}")
+                
+                # Save JSON data after each episode - organized by episode
+                import json
+                
+                # Reorganize data by episode
+                episode_data = []
+                for i in range(len(training_data['episodes'])):
+                    episode_data.append({
+                        'episode': training_data['episodes'][i],
+                        'reward': training_data['rewards'][i],
+                        'length': training_data['lengths'][i],
+                        'time': training_data['times'][i],
+                        'policy_loss': training_data['policy_losses'][i],
+                        'value_loss': training_data['value_losses'][i],
+                        'entropy': training_data['entropies'][i],
+                        'cumulative_time': training_data['cumulative_time'][i],
+                        'timesteps': training_data['timesteps'][i]
+                    })
+                
+                with open(os.path.join(log_dir, 'ppo_training_progress.json'), 'w') as f:
+                    json.dump(episode_data, f, indent=2)
+                
+                # Reset episode tracking variables
                 current_episode_reward = 0
-        
-        # Logging
-        if updates % (args.log_freq // args.rollout_steps) == 0:
-            # Calculate time statistics
-            elapsed_time = time.time() - start_time
-            fps = total_timesteps / elapsed_time
-            
-            if recent_rewards:
-                avg_recent_reward = np.mean(recent_rewards)
-            else:
-                avg_recent_reward = 0
-            
-            print(f"Update: {updates}, Timesteps: {total_timesteps}, Episodes: {episodes}")
-            print(f"Recent average reward: {avg_recent_reward:.2f}")
-            print(f"Policy loss: {loss_metrics['policy_loss']:.4f}, Value loss: {loss_metrics['value_loss']:.4f}")
-            print(f"Entropy: {loss_metrics['entropy']:.4f}, FPS: {fps:.1f}")
-            print("-------------------------------------")
+                current_episode_length = 0
+                episode_policy_losses = []
+                episode_value_losses = []
+                episode_entropies = []
+                episode_start_time = time.time()
         
         # Evaluate agent
-        if total_timesteps % args.eval_freq == 0 or total_timesteps >= args.total_timesteps:
+        if episodes > 0 and (episodes % args.eval_freq == 0 or total_timesteps >= args.total_timesteps):
             avg_reward, avg_length = evaluate_agent(
                 env=eval_env,
                 agent=agent,
@@ -323,11 +479,11 @@ def train_ppo():
             timesteps.append(total_timesteps)
             eval_rewards.append(avg_reward)
             
-            # Visualize training progress
-            visualize_training_progress(timesteps, eval_rewards, args.eval_freq)
+            # Visualize training progress with all metrics
+            visualize_training_progress(training_data)
         
         # Save model
-        if total_timesteps % args.save_freq == 0 or total_timesteps >= args.total_timesteps:
+        if episodes > 0 and (episodes % args.save_freq == 0 or total_timesteps >= args.total_timesteps):
             model_path = os.path.join(model_dir, f"ppo_pong_{total_timesteps}.pt")
             torch.save(agent.state_dict(), model_path)
             print(f"Model saved to {model_path}")
@@ -354,5 +510,73 @@ def train_ppo():
     # Return final performance
     return avg_reward
 
+def prompt_user():
+    """Prompt the user for rendering and model loading options."""
+    # Ask about rendering during training
+    train_render_choice = input("Do you want to view the game in human visible format during training? (y/n): ").lower()
+    train_render = train_render_choice in ['y', 'yes']
+    
+    # Never render during evaluation
+    eval_render = False
+    
+    # Ask about loading previous model
+    load_model = None
+    load_choice = input("Do you want to load a previous model to continue training? (y/n): ").lower()
+    if load_choice in ['y', 'yes']:
+        # Check for available models
+        model_dir = os.path.join('data', 'pong', 'models')
+        if os.path.exists(model_dir):
+            model_files = [f for f in os.listdir(model_dir) if f.endswith('.pt')]
+            if model_files:
+                model_files.sort()  # Sort to get newest models last
+                print("\nAvailable models:")
+                for i, model_file in enumerate(model_files):
+                    print(f"{i+1}. {model_file}")
+                
+                # Let user select model
+                selection = input(f"Enter model number (1-{len(model_files)}) or 'latest' for the most recent: ").lower()
+                if selection == 'latest':
+                    # Assuming the latest model is the last in the sorted list
+                    load_model = os.path.join(model_dir, model_files[-1])
+                else:
+                    try:
+                        idx = int(selection) - 1
+                        if 0 <= idx < len(model_files):
+                            load_model = os.path.join(model_dir, model_files[idx])
+                        else:
+                            print("Invalid selection. No model will be loaded.")
+                    except ValueError:
+                        print("Invalid input. No model will be loaded.")
+            else:
+                print("No model files found in data/pong/models/")
+        else:
+            print("Model directory not found.")
+    
+    return eval_render, train_render, load_model
+
 if __name__ == "__main__":
-    train_ppo()
+    # Get command line arguments first
+    args = parse_args()
+    
+    # Then override with user prompts
+    eval_render, train_render, load_model = prompt_user()
+    
+    # Update args with user choices
+    args.render = eval_render
+    if load_model:
+        args.load_model = load_model
+        print(f"Will load model from: {load_model}")
+    
+    # Create training environment with render_mode based on user preference
+    print(f"\nStarting training with rendering {'enabled' if train_render or eval_render else 'disabled'}")
+    
+    # Create environments with appropriate render_mode
+    env_render_mode = "human" if train_render else None
+    eval_env_render_mode = "human" if eval_render else None
+    
+    # Create environments
+    env = make_pong_env(reduced_actions=True, seed=args.seed, render_mode=env_render_mode)
+    eval_env = make_pong_env(reduced_actions=True, seed=args.seed + 1000, render_mode=eval_env_render_mode)
+    
+    # Pass environments to train_ppo
+    train_ppo(env=env, eval_env=eval_env, args=args, train_render=train_render)

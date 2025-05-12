@@ -461,14 +461,29 @@ class DiagnosticPPO:
             with open(f"{self.diagnostic_dir}/ppo/learning_rates.txt", "a") as f:
                 f.write(f"Update {self.update_count}: Learning rate = {current_lr:.6f}\n")
         
-        # Compute average metrics
-        avg_policy_loss = np.mean(all_policy_losses)
-        avg_value_loss = np.mean(all_value_losses)
-        avg_entropy = np.mean(all_entropies)
+        # Compute average metrics with safety checks
+        avg_policy_loss = np.mean(all_policy_losses) if all_policy_losses else 0.0
+        avg_value_loss = np.mean(all_value_losses) if all_value_losses else 0.0
+        avg_entropy = np.mean(all_entropies) if all_entropies else 0.0
+        avg_grad_norm = np.mean(all_grad_norms) if all_grad_norms else 0.0
+        
+        # Handle potential NaN values with warnings
+        if np.isnan(avg_policy_loss):
+            print("Warning: NaN policy loss detected, using 0.0")
+            avg_policy_loss = 0.0
+        if np.isnan(avg_value_loss):
+            print("Warning: NaN value loss detected, using 0.0")
+            avg_value_loss = 0.0
+        if np.isnan(avg_entropy):
+            print("Warning: NaN entropy detected, using 0.0")
+            avg_entropy = 0.0
+        if np.isnan(avg_grad_norm):
+            print("Warning: NaN gradient norm detected, using 0.0")
+            avg_grad_norm = 0.0
         
         return {
             'policy_loss': avg_policy_loss,
             'value_loss': avg_value_loss,
             'entropy': avg_entropy,
-            'grad_norm': np.mean(all_grad_norms) if len(all_grad_norms) > 0 else 0.0
+            'grad_norm': avg_grad_norm
         }

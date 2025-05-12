@@ -138,6 +138,15 @@ class DiagnosticActorCritic(nn.Module):
                             f"min={act.min():.4f}, max={act.max():.4f}, " +
                             f"mean={act.mean():.4f}, std={act.std():.4f}\n")
     
+    def get_diagnostic_counter(self):
+        """Return the current value of the diagnostic counter for checkpointing."""
+        return self.diagnostic_counter
+    
+    def set_diagnostic_counter(self, counter_value):
+        """Set the diagnostic counter to a specific value when resuming training."""
+        self.diagnostic_counter = counter_value
+        print(f"Diagnostic counter restored to {counter_value}")
+    
     def forward(self, x):
         """Forward pass through the network with batch normalization and leaky ReLU."""
         # Ensure the input is on the right device

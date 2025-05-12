@@ -8,6 +8,7 @@ import torch
 import numpy as np
 import glob
 import datetime
+import json
 from pathlib import Path
 
 # Import from our modular implementation
@@ -94,54 +95,32 @@ def list_available_models():
     
     return all_files
 
-def main():
-    """Main function to setup and run PPO on Pong."""
-    args = parse_args()
+def gather_user_preferences(args):
+    """
+    Gather all user preferences at the beginning to avoid interruptions during training.
     
-    # Set up directories
-    os.makedirs("data/pong", exist_ok=True)
-    os.makedirs("data/pong/diagnostics", exist_ok=True)
-    os.makedirs("data/pong/models", exist_ok=True)
+    Args:
+        args: Command line arguments
+        
+    Returns:
+        Dictionary with user preferences
+    """
+    print("\n== Training Configuration ==")
     
-    # Set random seeds
-    if args.seed is not None:
-        np.random.seed(args.seed)
-        torch.manual_seed(args.seed)
-        if torch.cuda.is_available():
-            torch.cuda.manual_seed_all(args.seed)
-        elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
-            torch.mps.manual_seed(args.seed)
-    
-    # Ask user about rendering
-    print("\n== Visualization Settings ==")
+    # 1. Visualization preferences
     render_response = input("Would you like to visualize the environment during training? (y/n): ").lower()
     render_env = render_response.startswith('y')
     
-    # Create environments with user-specified rendering
-    print("\nCreating environments...")
-    env = make_pong_env(render_mode="human" if render_env else None, seed=args.seed)
-    # Always render eval environment if the user wants to see it
-    eval_env = make_pong_env(render_mode="human" if render_env or args.render else None, seed=args.seed + 1000)
-    
-    # Get environment information
-    input_channels = env.observation_space.shape[0]
-    action_dim = env.action_space.n
-    
-    # Create actor-critic network
-    print("\nCreating actor-critic network...")
-    agent = DiagnosticActorCritic(
-        input_channels=input_channels,
-        action_dim=action_dim
-    ).to(device)
-    
-    # Ask user about loading a pre-trained model
+    # 2. Model loading preferences
     print("\n== Model Loading Options ==")
     load_model_response = input("Would you like to load a pre-trained model? (y/n): ").lower()
     
+    model_path = None
     optimizer_state = None
     start_timesteps = 0
     start_updates = 0
     start_episodes = 0
+    loaded_episode_records = {}
     
     if load_model_response.startswith('y'):
         # List available models
@@ -161,28 +140,105 @@ def main():
                     if 0 <= model_idx < len(all_model_files):
                         model_path = all_model_files[model_idx]
                         print(f"Loading model from {model_path}...")
-                        
-                        # Load model
-                        checkpoint = torch.load(model_path, map_location=device)
-                        
-                        # Check if it's a checkpoint with optimizer state
-                        if isinstance(checkpoint, dict) and 'agent' in checkpoint:
-                            agent.load_state_dict(checkpoint['agent'])
-                            optimizer_state = checkpoint.get('optimizer', None)
-                            start_updates = checkpoint.get('update', 0)
-                            start_timesteps = checkpoint.get('timesteps', 0)
-                            start_episodes = checkpoint.get('episode', 0)
-                            print(f"Resuming from update {start_updates}, episode {start_episodes}, timestep {start_timesteps}")
-                        else:
-                            # Simple model state dict
-                            agent.load_state_dict(checkpoint)
-                            print("Loaded model weights only (no training state).")
-                        
                         valid_selection = True
                     else:
                         print("Invalid selection. Please try again.")
                 except ValueError:
                     print("Invalid input. Please enter a number.")
+    
+    return {
+        'render_env': render_env,
+        'model_path': model_path,
+        'optimizer_state': optimizer_state,
+        'start_timesteps': start_timesteps,
+        'start_updates': start_updates,
+        'start_episodes': start_episodes,
+        'loaded_episode_records': loaded_episode_records
+    }
+
+def main():
+    """Main function to setup and run PPO on Pong."""
+    args = parse_args()
+    
+    # Set up directories
+    os.makedirs("data/pong", exist_ok=True)
+    os.makedirs("data/pong/diagnostics", exist_ok=True)
+    os.makedirs("data/pong/models", exist_ok=True)
+    
+    # Set random seeds
+    if args.seed is not None:
+        np.random.seed(args.seed)
+        torch.manual_seed(args.seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(args.seed)
+        elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            torch.mps.manual_seed(args.seed)
+    
+    # Gather all user preferences at the beginning
+    preferences = gather_user_preferences(args)
+    render_env = preferences['render_env']
+    model_path = preferences['model_path']
+    
+    # Create environments with user-specified rendering
+    print("\nCreating environments...")
+    env = make_pong_env(render_mode="human" if render_env else None, seed=args.seed)
+    # Always render eval environment if the user wants to see it
+    eval_env = make_pong_env(render_mode="human" if render_env or args.render else None, seed=args.seed + 1000)
+    
+    # Get environment information
+    input_channels = env.observation_space.shape[0]
+    action_dim = env.action_space.n
+    
+    # Create actor-critic network
+    print("\nCreating actor-critic network...")
+    agent = DiagnosticActorCritic(
+        input_channels=input_channels,
+        action_dim=action_dim
+    ).to(device)
+    
+    # Variables for training state
+    optimizer_state = None
+    start_timesteps = 0
+    start_updates = 0
+    start_episodes = 0
+    loaded_episode_records = {}
+    
+    # Load model if specified
+    if model_path:
+        # Load model
+        checkpoint = torch.load(model_path, map_location=device)
+        
+        # Check if it's a checkpoint with optimizer state
+        if isinstance(checkpoint, dict) and 'agent' in checkpoint:
+            agent.load_state_dict(checkpoint['agent'])
+            optimizer_state = checkpoint.get('optimizer', None)
+            start_updates = checkpoint.get('update', 0)
+            start_timesteps = checkpoint.get('timesteps', 0)
+            start_episodes = checkpoint.get('episode', 0)
+            
+            # Restore diagnostic counter for continuous activation visualization
+            if 'diagnostic_counter' in checkpoint:
+                diagnostic_counter = checkpoint['diagnostic_counter']
+                agent.set_diagnostic_counter(diagnostic_counter)
+                print(f"Restored diagnostic counter: {diagnostic_counter}")
+            else:
+                print("No diagnostic counter found in checkpoint, using default (0)")
+            
+            print(f"Resuming from update {start_updates}, episode {start_episodes}, timestep {start_timesteps}")
+            
+            # Try to load existing training data for continuity
+            training_data_path = "data/pong/training_data.json"
+            if os.path.exists(training_data_path):
+                try:
+                    with open(training_data_path, "r") as f:
+                        loaded_episode_records = json.load(f)
+                        print(f"Loaded existing training history with {len(loaded_episode_records)} episodes.")
+                except Exception as e:
+                    print(f"Error loading training data: {e}")
+        else:
+            # Simple model state dict
+            agent.load_state_dict(checkpoint)
+            print("Loaded model weights only (no training state).")
     
     # Create PPO algorithm
     print("Creating PPO algorithm...")
@@ -244,7 +300,8 @@ def main():
         optimizer_state=optimizer_state,
         start_timesteps=start_timesteps,
         start_updates=start_updates,
-        start_episodes=start_episodes
+        start_episodes=start_episodes,
+        loaded_episode_records=loaded_episode_records
     )
     
     # Final visualization

@@ -369,7 +369,7 @@ def evaluate_agent(env, agent, num_episodes=5, render=False, seed=None, current_
 
 def train(env, eval_env, agent, ppo, total_timesteps=1_000_000, seed=None, rollout_steps=128,
           eval_freq=10, save_freq=50, log_freq=1, optimizer_state=None, 
-          start_timesteps=0, start_updates=0, start_episodes=0):
+          start_timesteps=0, start_updates=0, start_episodes=0, loaded_episode_records=None):
     """
     Main training function for PPO on Pong with comprehensive diagnostics.
     
@@ -417,7 +417,7 @@ def train(env, eval_env, agent, ppo, total_timesteps=1_000_000, seed=None, rollo
     training_start_time = time.time()
     
     # Training data storage for JSON - using episode ID as primary key for human readability
-    episode_records = {}  # Dictionary with episode numbers as keys
+    episode_records = loaded_episode_records if loaded_episode_records else {}  # Dictionary with episode numbers as keys
     eval_records = {}     # Dictionary with update numbers as keys
     
     # Episode tracking variables
@@ -536,6 +536,10 @@ def train(env, eval_env, agent, ppo, total_timesteps=1_000_000, seed=None, rollo
             if i == len(ep_rewards) - 1:
                 with open(os.path.join(log_dir, "training_data.json"), "w") as f:
                     json.dump(episode_records, f, indent=2)
+                
+                # Generate training trends chart every 10 episodes (not tied to diagnostic mode)
+                if episode_count % 10 == 0:
+                    visualize_training_trends(episode_records, os.path.join(log_dir, "training_data.png"))
         
         # Evaluate agent
         if updates % eval_freq == 0:
@@ -573,14 +577,18 @@ def train(env, eval_env, agent, ppo, total_timesteps=1_000_000, seed=None, rollo
         
         # Save checkpoint
         if updates % save_freq == 0:
+            # Get diagnostic counter for continuous activation visualization
+            diagnostic_counter = agent.get_diagnostic_counter()
+            
             torch.save({
                 'agent': agent.state_dict(),
                 'optimizer': ppo.optimizer.state_dict(),
                 'update': updates,
                 'timesteps': total_timesteps_so_far,
-                'episode': episode_count
+                'episode': episode_count,
+                'diagnostic_counter': diagnostic_counter  # Save for visualization continuity
             }, os.path.join(models_dir, f"checkpoint_{updates}.pt"))
-            print(f"Checkpoint saved at update {updates}")
+            print(f"Checkpoint saved at update {updates} (diagnostic counter: {diagnostic_counter})")
             
             # Save training progress plot
             visualize_training_progress(episode_records, os.path.join(log_dir, "pong_ppo_minimal_progress.png"))
@@ -629,10 +637,26 @@ def visualize_training_progress(episode_records, filename="pong_ppo_minimal_prog
     # Extract data from episode records
     episodes = [record['episode_id'] for record in sorted_records]
     rewards = [record['reward'] for record in sorted_records]
-    policy_losses = [record['policy_loss'] for record in sorted_records]
-    value_losses = [record['value_loss'] for record in sorted_records]
-    entropies = [record['entropy'] for record in sorted_records]
-    grad_norms = [record.get('grad_norm', 0) for record in sorted_records]
+    
+    # Handle NaN values and convert to appropriate data types for the metrics
+    policy_losses = []
+    value_losses = []
+    entropies = []
+    grad_norms = []
+    
+    for record in sorted_records:
+        # Replace NaN or inf values with zeros to prevent plotting issues
+        policy_loss = record['policy_loss']
+        policy_losses.append(0.0 if np.isnan(policy_loss) or np.isinf(policy_loss) else float(policy_loss))
+        
+        value_loss = record['value_loss']
+        value_losses.append(0.0 if np.isnan(value_loss) or np.isinf(value_loss) else float(value_loss))
+        
+        entropy = record['entropy']
+        entropies.append(0.0 if np.isnan(entropy) or np.isinf(entropy) else float(entropy))
+        
+        grad_norm = record.get('grad_norm', 0)
+        grad_norms.append(0.0 if np.isnan(grad_norm) or np.isinf(grad_norm) else float(grad_norm))
     
     # Plot rewards on primary axis
     reward_line, = ax1.plot(episodes, rewards, 'b-', linewidth=2, label='Episode Reward')
@@ -641,26 +665,89 @@ def visualize_training_progress(episode_records, filename="pong_ppo_minimal_prog
     ax1.tick_params(axis='y', labelcolor='b')
     ax1.grid(True, alpha=0.3)
     
-    # Create secondary axis for losses and entropy
-    ax2 = ax1.twinx()
+    # Create a second figure for metrics to use different scales
+    fig2, (ax_policy, ax_value, ax_entropy) = plt.subplots(3, 1, figsize=(15, 12), sharex=True)
+    fig2.suptitle('PPO Training Metrics', fontsize=16)
     
-    # Plot loss metrics on secondary axis
-    policy_line, = ax2.plot(episodes, policy_losses, 'g-', linewidth=2, label='Policy Loss')
-    value_line, = ax2.plot(episodes, value_losses, 'r-', linewidth=2, label='Value Loss')
-    entropy_line, = ax2.plot(episodes, entropies, 'c-', linewidth=2, label='Entropy')
-    grad_line, = ax2.plot(episodes, grad_norms, 'm-', linewidth=2, label='Grad Norm')
+    # Plot each metric on its own axis with appropriate scaling
+    ax_policy.plot(episodes, policy_losses, 'g-', linewidth=2)
+    ax_policy.set_ylabel('Policy Loss', fontsize=12, color='g')
+    ax_policy.tick_params(axis='y', labelcolor='g')
+    ax_policy.grid(True, alpha=0.3)
     
-    ax2.set_ylabel('Loss / Entropy / Grad Norm', fontsize=12, color='g')
-    ax2.tick_params(axis='y', labelcolor='g')
+    ax_value.plot(episodes, value_losses, 'r-', linewidth=2)
+    ax_value.set_ylabel('Value Loss', fontsize=12, color='r')
+    ax_value.tick_params(axis='y', labelcolor='r')
+    ax_value.grid(True, alpha=0.3)
     
-    # Add legend for all plots
-    lines = [reward_line, policy_line, value_line, entropy_line, grad_line]
-    labels = [line.get_label() for line in lines]
-    plt.legend(lines, labels, loc='best', fontsize=10)
+    ax_entropy.plot(episodes, entropies, 'c-', linewidth=2)
+    ax_entropy.set_ylabel('Entropy', fontsize=12, color='c')
+    ax_entropy.set_xlabel('Episode', fontsize=12)
+    ax_entropy.tick_params(axis='y', labelcolor='c')
+    ax_entropy.grid(True, alpha=0.3)
     
-    # Adjust layout
+    # Adjust layout for both figures
     plt.tight_layout()
     
-    # Save the plot
+    # Save the plots
+    plt.savefig(filename.replace('.png', '_metrics.png'))
+    plt.close(fig2)
+    
+    # Also, add grad norm to the rewards plot with a separate y-axis
+    ax2 = ax1.twinx()
+    grad_line, = ax2.plot(episodes, grad_norms, 'm-', linewidth=2, label='Grad Norm')
+    ax2.set_ylabel('Grad Norm', fontsize=12, color='m')
+    ax2.tick_params(axis='y', labelcolor='m')
+    
+    # Add legend for both plots
+    lines = [reward_line, grad_line]
+    labels = [line.get_label() for line in lines]
+    ax1.legend(lines, labels, loc='best', fontsize=10)
+    
+    plt.tight_layout()
+    plt.savefig(filename)
+    plt.close(fig)
+
+
+def visualize_training_trends(episode_records, filename="training_data.png"):
+    """
+    Generate chart showing reward trend by episode number.
+    This chart is always generated (not just in diagnostic mode).
+    
+    Args:
+        episode_records: Dictionary with episode IDs as keys and record data as values
+        filename: Output file name
+    """
+    if len(episode_records) == 0:
+        return  # Nothing to plot yet
+    
+    # Create figure
+    fig, ax = plt.subplots(figsize=(12, 6))
+    plt.title('Pong Training Progress', fontsize=16)
+    
+    # Sort episodes
+    sorted_keys = sorted(episode_records.keys(), key=lambda x: int(x))
+    sorted_records = [episode_records[key] for key in sorted_keys]
+    
+    # Extract data
+    episodes = [record['episode_id'] for record in sorted_records]
+    rewards = [record['reward'] for record in sorted_records]
+    
+    # Plot rewards
+    ax.plot(episodes, rewards, 'b-', linewidth=2, label='Episode Reward')
+    ax.set_xlabel('Episode', fontsize=12)
+    ax.set_ylabel('Reward', fontsize=12, color='b')
+    ax.tick_params(axis='y', labelcolor='b')
+    ax.grid(True, alpha=0.3)
+    
+    # Add a horizontal line at the mean reward
+    mean_reward = np.mean(rewards)
+    ax.axhline(y=mean_reward, color='r', linestyle='--', 
+              label=f'Mean: {mean_reward:.1f}')
+    
+    # Add legend
+    ax.legend(loc='best')
+    
+    plt.tight_layout()
     plt.savefig(filename)
     plt.close()

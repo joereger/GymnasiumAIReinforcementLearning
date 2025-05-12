@@ -26,6 +26,10 @@ def parse_args():
                         help="Evaluation frequency (in episodes)")
     parser.add_argument("--save-freq", type=int, default=100,
                         help="Model saving frequency (in episodes)")
+    parser.add_argument("--vis-freq", type=int, default=10,
+                        help="Visualization frequency (in episodes)")
+    parser.add_argument("--json-save-freq", type=int, default=10,
+                        help="JSON saving frequency (in episodes)")
     parser.add_argument("--render", action="store_true",
                         help="Render environment during evaluation")
     parser.add_argument("--lr", type=float, default=2.5e-4,
@@ -244,6 +248,7 @@ def train_ppo(env, eval_env, args, train_render=False):
         args: Command line arguments
         train_render: Whether to render during training
     """
+    import gc  # For garbage collection
     # Set up logging directory
     log_dir = os.path.join('data', 'pong')
     os.makedirs(log_dir, exist_ok=True)
@@ -278,6 +283,12 @@ def train_ppo(env, eval_env, args, train_render=False):
     best_eval_reward = float('-inf')
     best_model_episode = 0
     training_start_time = time.time()
+    
+    # Variables to prevent duplicate operations
+    last_saved_episode = 0
+    last_json_saved_episode = 0
+    last_visualized_episode = 0
+    last_eval_episode = 0
     
     # Check for existing training data when loading a model
     existing_data = None
@@ -466,8 +477,16 @@ def train_ppo(env, eval_env, args, train_render=False):
                         'timesteps': training_data['timesteps'][i]
                     })
                 
-                with open(os.path.join(log_dir, 'ppo_training_progress.json'), 'w') as f:
-                    json.dump(episode_data, f, indent=2)
+                # Only save JSON every json_save_freq episodes
+                if episodes % args.json_save_freq == 0 and episodes > last_json_saved_episode:
+                    with open(os.path.join(log_dir, 'ppo_training_progress.json'), 'w') as f:
+                        json.dump(episode_data, f, indent=2)
+                    last_json_saved_episode = episodes
+                
+                # Visualize training progress every vis_freq episodes
+                if episodes % args.vis_freq == 0 and episodes > last_visualized_episode:
+                    visualize_training_progress(training_data)
+                    last_visualized_episode = episodes
                 
                 # Reset episode tracking variables
                 current_episode_reward = 0
@@ -478,7 +497,8 @@ def train_ppo(env, eval_env, args, train_render=False):
                 episode_start_time = time.time()
         
         # Evaluate agent periodically
-        if episodes > 0 and (episodes % args.eval_freq == 0 or total_timesteps >= args.total_timesteps):
+        if episodes > 0 and ((episodes % args.eval_freq == 0 and episodes > last_eval_episode) or total_timesteps >= args.total_timesteps):
+            last_eval_episode = episodes
             avg_reward, avg_length = evaluate_agent(
                 env=eval_env,
                 agent=agent,
@@ -536,14 +556,15 @@ def train_ppo(env, eval_env, args, train_render=False):
             with open(os.path.join(log_dir, 'ppo_training_progress.json'), 'w') as f:
                 json.dump(episode_data, f, indent=2)
             
-            # Visualize training progress with all metrics
-            visualize_training_progress(training_data)
+            # Force garbage collection to prevent memory build-up
+            gc.collect()
         
-        # Save model
-        if episodes > 0 and (episodes % args.save_freq == 0 or total_timesteps >= args.total_timesteps):
+        # Save model - only at exact save_freq intervals to prevent duplicate saves
+        if episodes > 0 and episodes % args.save_freq == 0 and episodes > last_saved_episode:
             model_path = os.path.join(model_dir, f"ppo_pong_{total_timesteps}.pt")
             torch.save(agent.state_dict(), model_path)
             print(f"Model saved to {model_path}")
+            last_saved_episode = episodes
     
     # Final evaluation
     print("\nTraining completed. Final evaluation:")

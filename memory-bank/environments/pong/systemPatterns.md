@@ -70,7 +70,7 @@ We are currently using PPO (Proximal Policy Optimization) as our primary algorit
 
 ### PPO Hyperparameters
 
-Standard PPO hyperparameters for Pong:
+Updated PPO hyperparameters for Pong (as of 5/11/2025):
 
 ```python
 # PPO hyperparameters
@@ -84,7 +84,9 @@ max_grad_norm = 0.5
 rollout_steps = 128
 n_epochs = 4
 batch_size = 64
-total_timesteps = 1_000_000
+total_timesteps = 25_000_000  # Increased to 25M for thorough learning
+eval_freq = 500  # Evaluate every 500 episodes
+save_freq = 100  # Save model every 100 episodes
 ```
 
 ### Key PPO Components
@@ -94,6 +96,8 @@ total_timesteps = 1_000_000
 3. **PPO Clipping**: Restricts policy updates to prevent destructively large updates.
 4. **Entropy Regularization**: Encourages exploration by penalizing overly deterministic policies.
 5. **Multiple Epochs**: Running several optimization passes per rollout for better sample efficiency.
+6. **Best Model Tracking**: Saves a separate copy of the best-performing model during evaluation.
+7. **Training Continuity**: Supports stopping and resuming training with automatic progress recovery.
 
 ### Rollout Collection
 
@@ -105,7 +109,8 @@ rollout = collect_rollout(
     env=env,
     agent=agent,
     ppo=ppo,
-    rollout_steps=args.rollout_steps
+    rollout_steps=args.rollout_steps,
+    render=train_render  # Optional rendering during training
 )
 
 # Update agent with multiple optimization epochs
@@ -115,6 +120,28 @@ loss_metrics = ppo.update(
     batch_size=64
 )
 ```
+
+### Training Data Persistence
+
+Training progress is saved in a structured JSON format that facilitates resuming training:
+
+```python
+# Each episode's data is saved as an object with all metrics
+episode_data.append({
+    'episode': episodes,
+    'reward': current_episode_reward,
+    'length': current_episode_length,
+    'time': episode_duration,
+    'policy_loss': avg_policy_loss,
+    'value_loss': avg_value_loss,
+    'entropy': avg_entropy,
+    'cumulative_time': cumulative_time,
+    'timesteps': total_timesteps,
+    'eval_reward': eval_reward  # Only present after evaluation
+})
+```
+
+When loading a model, the code automatically looks for and loads this progress data to continue training seamlessly.
 
 ## DQN Hyperparameters (Alternative Approach)
 
@@ -140,15 +167,21 @@ When evaluating trained models:
    - For PPO, use `deterministic=True` in `agent.get_action()` for evaluation.
    - For DQN, use `explore=False` in `agent.act()` for a greedy policy.
 
-2. **Limited Exploration**: Consider using a small exploration rate (epsilon=0.05) during evaluation to get a more realistic measure of performance, especially for partially trained agents.
+2. **Limited Exploration**: We use a small exploration rate (epsilon=0.05) during evaluation to get a more realistic measure of performance, especially for partially trained agents.
 
-3. **Standard Evaluation Protocol**:
-   - Evaluate every 10,000 training steps
-   - Run at least 5 episodes per evaluation
-   - Report mean and standard deviation of rewards
-   - Save training curves and visualizations
+3. **Updated Evaluation Protocol**:
+   - Evaluate every 500 episodes (rather than by steps)
+   - Run 5 complete episodes per evaluation
+   - Record average reward and episode length
+   - Save evaluation results in the training progress JSON
+   - Track and save the best-performing model separately
 
-4. **Consistent Environment**: Ensure the evaluation environment uses the same wrappers as the training environment, including `ReducedActionSpace`.
+4. **Consistent Environment**: The evaluation environment uses the same wrappers as the training environment, including `ReducedActionSpace`, but with `render_mode=None` by default.
+
+5. **Visualization**:
+   - Use a single chart with multiple y-axes for clear visualization
+   - Primary axis for rewards, secondary axis for losses and entropy
+   - Include proper legends and clear color coding
 
 ## Common Mistakes to Avoid
 
@@ -158,3 +191,7 @@ When evaluating trained models:
 4. **Missing wrappers**: All listed wrappers play a role.
 5. **PPO-specific**: Not normalizing advantages can lead to unstable learning.
 6. **PPO-specific**: Using too short rollouts reduces learning signal quality.
+7. **Missing sound disabling**: Game sound can cause unnecessary distraction during training.
+8. **Not handling training continuity**: Failing to reload training progress data when continuing training.
+9. **Forgetting to track best model**: Always keep a separate copy of the best-performing model.
+10. **Using improper seeding**: Modern Gymnasium uses `env.reset(seed=...)` rather than `env.seed()`.

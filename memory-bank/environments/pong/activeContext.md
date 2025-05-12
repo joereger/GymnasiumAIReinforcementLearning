@@ -2,17 +2,18 @@
 
 ## Current Status (Last Updated: 5/11/2025)
 
-We have **pivoted from DQN to PPO (Proximal Policy Optimization)** for the Pong environment. After thorough diagnostics with the DQN implementation, we identified several issues that were complicating the learning process. PPO was chosen as a more robust alternative that typically offers better sample efficiency and stability.
+We have **pivoted from DQN to PPO (Proximal Policy Optimization)** for the Pong environment, with significant improvements to the implementation. The PPO algorithm has been enhanced with robust logging, visualization, training continuity features, and optimized for longer training runs.
 
 ## Current Implementation
 
-Our current focus is on the **PPO implementation** with the following key characteristics:
+Our current focus is on the **improved PPO implementation** (`pong_ppo.py`, renamed from `pong_ppo_train.py`) with the following key characteristics:
 
 1. **Environment Wrappers**: We've consolidated the environment wrappers into a dedicated module (`pong_env_wrappers.py`) ensuring:
    * Proper frame preprocessing (grayscale, resizing to 84x84)
    * Frame stacking (4 frames) in channels-first format for PyTorch
    * Essential Atari-specific wrappers including `FireResetEnv`, `NoopResetEnv`, etc.
    * Reduced action space of 3 actions (STAY, UP, DOWN) for efficiency
+   * Automatic sound disabling for training
 
 2. **PPO Architecture**:
    * Actor-Critic network with shared CNN backbone
@@ -21,7 +22,7 @@ Our current focus is on the **PPO implementation** with the following key charac
    * Implements the clipped surrogate objective for stability
    * Includes entropy regularization to encourage exploration
 
-3. **Hyperparameters**:
+3. **Optimized Hyperparameters**:
    * Learning rate: 2.5e-4
    * Gamma (discount factor): 0.99
    * GAE Lambda: 0.95
@@ -29,34 +30,46 @@ Our current focus is on the **PPO implementation** with the following key charac
    * Multiple optimization epochs (4) per rollout
    * Rollout length: 128 steps
    * Normalized advantages for reduced variance
+   * **Total timesteps: 25 million** (increased for thorough learning)
 
-4. **Training Infrastructure**:
-   * Regular evaluations (every 10,000 steps)
-   * Model checkpointing (every 100,000 steps)
-   * Training progress visualization
+4. **Enhanced Training Infrastructure**:
+   * Episode-based evaluation (every 500 episodes)
+   * Model checkpointing (every 100 episodes)
+   * Best model tracking and preservation (`ppo_pong_best.pt`)
+   * Training progress visualization with unified charts
    * Small exploration during evaluation (epsilon=0.05)
+   * **Training continuity** - ability to stop and resume training
 
-5. **Visualization Capabilities**:
-   * Policy attention visualization
-   * Action distribution tracking
-   * Training curve generation
-   * Video recording of agent gameplay
+5. **Improved Visualization & Logging**:
+   * Combined metrics visualization with multiple axes
+   * Compact single-line per-episode logging
+   * Time formatting in HH:MM:SS format
+   * Episode-organized JSON data for easier analysis
+   * Real-time progress tracking
+
+6. **User Interaction**:
+   * Optional real-time visualization during training
+   * Support for loading previous models to continue training
+   * Interactive model selection for loading
 
 ## Next Steps
 
-1. **Initial PPO Training**: Run the PPO implementation for approximately 1 million steps to establish a baseline performance level. We expect to see significant improvement over random policy within the first 100,000-200,000 steps.
+1. **Long PPO Training**: Run the PPO implementation for the full 25 million timesteps to reach optimal performance. The extended training should allow the agent to master Pong completely.
 
-2. **Hyperparameter Tuning**: If initial results are promising but suboptimal, experiment with:
-   * Increasing rollout length (higher sample collection before updates)
-   * Adjusting entropy coefficient (exploration vs. exploitation balance)
-   * Modifying learning rate schedule
+2. **Performance Analysis**: Conduct thorough analysis of learning curves and agent behavior:
+   * Track reward progression over time
+   * Analyze policy and value loss trends
+   * Evaluate entropy decay patterns
 
-3. **Advanced Techniques**: If needed, explore enhancements such as:
-   * Curiosity-driven exploration
-   * Self-supervised auxiliary tasks
-   * Frame skipping adjustments
+3. **Hyperparameter Refinement**: Based on performance patterns during extended training:
+   * Consider adjusting entropy coefficient as training progresses
+   * Evaluate learning rate decay options
+   * Tune GAE lambda for more stable advantage estimates
 
-4. **Documentation**: Once we have established successful performance, thoroughly document PPO advantages compared to DQN for this specific environment in the memory bank.
+4. **Documentation & Visualization**: Create comprehensive documentation of the results:
+   * Generate detailed performance charts
+   * Create videos of the best-performing agent
+   * Analyze common gameplay strategies learned by the agent
 
 ## Discontinued Approaches
 

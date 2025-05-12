@@ -95,6 +95,36 @@ class EpisodicLifeEnv(gym.Wrapper):
         self.lives = self.env.unwrapped.ale.lives()
         return obs, info
 
+class PongEpisodicEnv(EpisodicLifeEnv):
+    """
+    Extension of EpisodicLifeEnv specifically for Pong.
+    In Pong, game endings (21 points) don't register as life changes, so we need
+    to detect large negative rewards to identify game endings.
+    """
+    def __init__(self, env):
+        super(PongEpisodicEnv, self).__init__(env)
+        self.score_accumulator = 0
+        
+    def step(self, action):
+        # Use parent class step first
+        obs, reward, terminated, truncated, info = super().step(action)
+        
+        # For Pong specifically, track large negative rewards
+        # When raw reward is <= -21, it indicates a completed game
+        # (opponent reached 21 points, which ends a game)
+        self.score_accumulator += reward
+        if self.score_accumulator <= -21:
+            # Reset accumulator and trigger episode end
+            self.score_accumulator = 0
+            terminated = True
+            
+        return obs, reward, terminated, truncated, info
+        
+    def reset(self, **kwargs):
+        # Reset score accumulator
+        self.score_accumulator = 0
+        return super().reset(**kwargs)
+
 class MaxAndSkipEnv(gym.Wrapper):
     """
     Return only every `skip`-th frame and max over the last 2 frames to account for
@@ -294,7 +324,14 @@ def make_pong_env(env_id="PongNoFrameskip-v4", render_mode=None, reduced_actions
     env = MaxAndSkipEnv(env, skip=4)
     if 'FIRE' in env.unwrapped.get_action_meanings():
         env = FireResetEnv(env)
-    env = EpisodicLifeEnv(env)
+    
+    # Use the Pong-specific episodic environment wrapper for Pong
+    if "Pong" in env_id:
+        env = PongEpisodicEnv(env)
+        print("Using PongEpisodicEnv wrapper for proper game boundary detection")
+    else:
+        env = EpisodicLifeEnv(env)
+    
     env = WarpFrame(env)
     env = ClipRewardEnv(env)
     env = FrameStack(env, 4)

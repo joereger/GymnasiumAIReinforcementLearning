@@ -25,7 +25,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Train PPO on Pong with detailed diagnostics")
     
     # Training parameters
-    parser.add_argument("--total_timesteps", type=int, default=1_000_000, 
+    parser.add_argument("--total_timesteps", type=int, default=15_000_000, 
                         help="Total timesteps for training")
     parser.add_argument("--rollout_steps", type=int, default=4096, 
                         help="Number of steps to collect per rollout (larger is more stable)")

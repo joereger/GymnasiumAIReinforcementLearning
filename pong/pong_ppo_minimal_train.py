@@ -617,7 +617,8 @@ def train(env, eval_env, agent, ppo, total_timesteps=1_000_000, seed=None, rollo
 
 def visualize_training_progress(episode_records, filename="pong_ppo_minimal_progress.png"):
     """
-    Visualize and save training progress as a single chart with multiple axes.
+    Visualize and save training progress as a single chart for rewards
+    and separate charts for metrics.
     
     Args:
         episode_records: Dictionary with episode IDs as keys and record data as values
@@ -626,8 +627,8 @@ def visualize_training_progress(episode_records, filename="pong_ppo_minimal_prog
     if len(episode_records) == 0:
         return  # Nothing to plot yet
     
-    # Create figure with primary axis
-    fig, ax1 = plt.subplots(figsize=(15, 8))
+    # Create figure for reward plot
+    fig, ax = plt.subplots(figsize=(15, 8))
     plt.title('PPO Training Progress on Pong', fontsize=16)
     
     # Sort episode records by episode ID (numerical order)
@@ -642,7 +643,6 @@ def visualize_training_progress(episode_records, filename="pong_ppo_minimal_prog
     policy_losses = []
     value_losses = []
     entropies = []
-    grad_norms = []
     
     for record in sorted_records:
         # Replace NaN or inf values with zeros to prevent plotting issues
@@ -654,18 +654,34 @@ def visualize_training_progress(episode_records, filename="pong_ppo_minimal_prog
         
         entropy = record['entropy']
         entropies.append(0.0 if np.isnan(entropy) or np.isinf(entropy) else float(entropy))
-        
-        grad_norm = record.get('grad_norm', 0)
-        grad_norms.append(0.0 if np.isnan(grad_norm) or np.isinf(grad_norm) else float(grad_norm))
     
-    # Plot rewards on primary axis
-    reward_line, = ax1.plot(episodes, rewards, 'b-', linewidth=2, label='Episode Reward')
-    ax1.set_xlabel('Episode', fontsize=12)
-    ax1.set_ylabel('Reward', fontsize=12, color='b')
-    ax1.tick_params(axis='y', labelcolor='b')
-    ax1.grid(True, alpha=0.3)
+    # Plot rewards
+    ax.plot(episodes, rewards, 'b-', linewidth=1.5, label='Episode Reward')
+    ax.set_xlabel('Episode', fontsize=12)
+    ax.set_ylabel('Reward', fontsize=12, color='b')
+    ax.tick_params(axis='y', labelcolor='b')
+    ax.grid(True, alpha=0.3)
     
-    # Create a second figure for metrics to use different scales
+    # Calculate 100-episode rolling average
+    rolling_rewards = []
+    window_size = 100
+    for i in range(len(rewards)):
+        start_idx = max(0, i - window_size + 1)
+        window = rewards[start_idx:i+1]
+        rolling_rewards.append(np.mean(window))
+    
+    # Plot rolling average as bold red line (on top)
+    ax.plot(episodes, rolling_rewards, 'r-', linewidth=3, label='100-Episode Avg', zorder=10)
+    
+    # Add legend
+    ax.legend(loc='best')
+    
+    # Save the rewards plot
+    plt.tight_layout()
+    plt.savefig(filename)
+    plt.close(fig)
+    
+    # Create a second figure for metrics
     fig2, (ax_policy, ax_value, ax_entropy) = plt.subplots(3, 1, figsize=(15, 12), sharex=True)
     fig2.suptitle('PPO Training Metrics', fontsize=16)
     
@@ -686,32 +702,15 @@ def visualize_training_progress(episode_records, filename="pong_ppo_minimal_prog
     ax_entropy.tick_params(axis='y', labelcolor='c')
     ax_entropy.grid(True, alpha=0.3)
     
-    # Adjust layout for both figures
+    # Adjust layout and save the metrics plot
     plt.tight_layout()
-    
-    # Save the plots
     plt.savefig(filename.replace('.png', '_metrics.png'))
     plt.close(fig2)
-    
-    # Also, add grad norm to the rewards plot with a separate y-axis
-    ax2 = ax1.twinx()
-    grad_line, = ax2.plot(episodes, grad_norms, 'm-', linewidth=2, label='Grad Norm')
-    ax2.set_ylabel('Grad Norm', fontsize=12, color='m')
-    ax2.tick_params(axis='y', labelcolor='m')
-    
-    # Add legend for both plots
-    lines = [reward_line, grad_line]
-    labels = [line.get_label() for line in lines]
-    ax1.legend(lines, labels, loc='best', fontsize=10)
-    
-    plt.tight_layout()
-    plt.savefig(filename)
-    plt.close(fig)
 
 
 def visualize_training_trends(episode_records, filename="training_data.png"):
     """
-    Generate chart showing reward trend by episode number.
+    Generate chart showing reward trend by episode number with a 100-episode rolling average.
     This chart is always generated (not just in diagnostic mode).
     
     Args:
@@ -734,16 +733,22 @@ def visualize_training_trends(episode_records, filename="training_data.png"):
     rewards = [record['reward'] for record in sorted_records]
     
     # Plot rewards
-    ax.plot(episodes, rewards, 'b-', linewidth=2, label='Episode Reward')
+    ax.plot(episodes, rewards, 'b-', linewidth=1.5, label='Episode Reward')
     ax.set_xlabel('Episode', fontsize=12)
     ax.set_ylabel('Reward', fontsize=12, color='b')
     ax.tick_params(axis='y', labelcolor='b')
     ax.grid(True, alpha=0.3)
     
-    # Add a horizontal line at the mean reward
-    mean_reward = np.mean(rewards)
-    ax.axhline(y=mean_reward, color='r', linestyle='--', 
-              label=f'Mean: {mean_reward:.1f}')
+    # Calculate 100-episode rolling average
+    rolling_rewards = []
+    window_size = 100
+    for i in range(len(rewards)):
+        start_idx = max(0, i - window_size + 1)
+        window = rewards[start_idx:i+1]
+        rolling_rewards.append(np.mean(window))
+    
+    # Plot rolling average as bold red line (on top)
+    ax.plot(episodes, rolling_rewards, 'r-', linewidth=3, label='100-Episode Avg', zorder=10)
     
     # Add legend
     ax.legend(loc='best')

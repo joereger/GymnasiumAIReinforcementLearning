@@ -49,7 +49,7 @@ def parse_args():
                         help="Number of episodes for evaluation")
     
     # Saving and logging
-    parser.add_argument("--save_freq", type=int, default=50, 
+    parser.add_argument("--save_freq", type=int, default=10, 
                         help="Model saving frequency (in updates)")
     parser.add_argument("--log_freq", type=int, default=1, 
                         help="Logging frequency (in episodes)")

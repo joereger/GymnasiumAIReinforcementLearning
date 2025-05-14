@@ -27,11 +27,14 @@ For the challenging Bipedal Walker environment, multiple approaches have been im
 
 These diverse approaches demonstrate the trade-offs between different reinforcement learning paradigms when applied to challenging continuous control problems. More detailed information about each approach can be found in the environment's Memory Bank documentation.
 
-### Pong with DQN
+### Pong with DQN and PPO
 
 ![Pong Game Screenshot](assets/pong-screenshot.png)
 
-A Deep Q-Network (DQN) agent has been implemented for the classic Atari game Pong (`PongNoFrameskip-v4`). This implementation follows common best practices ("Smart Defaults") for Atari DQN agents, including:
+Multiple reinforcement learning approaches have been implemented for the classic Atari game Pong (`PongNoFrameskip-v4`):
+
+#### DQN Implementation
+A Deep Q-Network (DQN) agent with:
 
 - **Preprocessing:** Grayscale conversion, downsampling to 84x84, and stacking 4 consecutive frames to provide motion context.
 - **CNN Architecture:** A standard 3-layer convolutional neural network followed by fully connected layers, as described in DeepMind's 2015 Atari paper.
@@ -39,7 +42,23 @@ A Deep Q-Network (DQN) agent has been implemented for the classic Atari game Pon
 - **Target Network:** Used to stabilize Q-value learning.
 - **Epsilon-Greedy Exploration:** Balances exploration of new actions with exploitation of known good actions.
 
-The script `pong/pong_dqn.py` includes options for training, evaluation, human-readable rendering, and loading checkpoints. Training progress (rewards, Q-values) will be plotted and saved to the `data/pong/` directory.
+The script `pong/pong_dqn.py` includes options for training, evaluation, human-readable rendering, and loading checkpoints.
+
+#### PPO Implementation
+A Proximal Policy Optimization (PPO) implementation with detailed diagnostics:
+
+![Pong PPO Training Progress](assets/pong_ppo_minimal_training_data.png)
+*Training progress from the pong_ppo_minimal.py implementation showing over 4000 episodes*
+
+- **Actor-Critic Architecture:** Shared CNN backbone with separate policy and value heads
+- **Improved Stability:** Batch normalization, orthogonal initialization, and numerical stability fixes
+- **Detailed Diagnostics:** Network activation visualization, action distribution analysis, and reward tracking
+- **Training Progress Visualization:** Real-time graphing of rewards and 100-episode rolling average
+- **Interactive Mode:** New user prompt to easily switch between training and evaluation modes
+
+The results above were produced by the `pong/pong_ppo_minimal.py` implementation, which offers an interactive prompt to either train a new model or evaluate existing models with visualization. This minimal implementation focuses on stability, diagnostics, and user experience while achieving significant performance improvements over 4000+ episodes.
+
+All training data, models, and visualizations are saved to the `data/pong/` directory.
 
 ### Freeway with Double DQN
 
@@ -84,6 +103,7 @@ Here's a high-level overview of environments and the corresponding solution file
     *   `bipedal_walker/bipedal_walker.py`
 *   **Pong:**
     *   `pong/pong_dqn.py`
+    *   `pong/pong_ppo_minimal.py`
 *   **Freeway:**
     *   `freeway/freeway_double_dqn.py`
 *   **Cart Pole:**

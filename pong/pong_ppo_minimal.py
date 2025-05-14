@@ -174,10 +174,54 @@ def main():
         elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
             torch.mps.manual_seed(args.seed)
     
-    # Gather all user preferences at the beginning
-    preferences = gather_user_preferences(args)
-    render_env = preferences['render_env']
-    model_path = preferences['model_path']
+    # Ask user whether to train or evaluate
+    mode_choice = input("\nDo you want to [t]rain or [e]valuate? ").lower()
+    if mode_choice.startswith('e'):
+        args.eval_only = True
+        
+        # Always offer model selection in evaluation mode unless explicit path provided in command line
+        # (args.model_path would be different from default if specified in command line)
+        is_default_path = args.model_path == "data/pong/models/best_model.pt"
+        
+        if is_default_path:
+            all_model_files = list_available_models()
+            if all_model_files:
+                valid_selection = False
+                while not valid_selection:
+                    model_selection = input("\nEnter the number of the model to evaluate: ")
+                    try:
+                        model_idx = int(model_selection) - 1
+                        if 0 <= model_idx < len(all_model_files):
+                            args.model_path = all_model_files[model_idx]
+                            print(f"Selected model: {args.model_path}")
+                            valid_selection = True
+                        else:
+                            print("Invalid selection. Please try again.")
+                    except ValueError:
+                        print("Invalid input. Please enter a number.")
+            else:
+                print("No models found for evaluation. Please train a model first.")
+                return
+        # Ask about rendering
+        if not args.render:
+            render_response = input("Would you like to visualize the environment during evaluation? (y/n): ").lower()
+            args.render = render_response.startswith('y')
+        
+        # For evaluation mode, we don't need to gather training preferences
+        render_env = args.render  # Just use the render flag directly
+        model_path = args.model_path
+    else:
+        # Only gather full training preferences when in training mode
+        preferences = gather_user_preferences(args)
+        render_env = preferences['render_env']
+        model_path = preferences['model_path']
+    # These are only set in training mode
+    if not args.eval_only:
+        optimizer_state = preferences.get('optimizer_state')
+        start_timesteps = preferences.get('start_timesteps', 0)
+        start_updates = preferences.get('start_updates', 0)
+        start_episodes = preferences.get('start_episodes', 0)
+        loaded_episode_records = preferences.get('loaded_episode_records', {})
     
     # Create environments with user-specified rendering
     print("\nCreating environments...")
@@ -196,15 +240,15 @@ def main():
         action_dim=action_dim
     ).to(device)
     
-    # Variables for training state
+    # Variables for training state (defaults for eval mode)
     optimizer_state = None
     start_timesteps = 0
     start_updates = 0
     start_episodes = 0
     loaded_episode_records = {}
     
-    # Load model if specified
-    if model_path:
+    # Load model if specified (only in training mode, evaluation mode handles this separately)
+    if model_path and not args.eval_only:
         # Load model
         checkpoint = torch.load(model_path, map_location=device)
         
@@ -256,7 +300,12 @@ def main():
     # Evaluation only mode
     if args.eval_only:
         print(f"Loading model from {args.model_path}...")
-        agent.load_state_dict(torch.load(args.model_path, map_location=device))
+        # Handle both state_dict and full checkpoint formats
+        checkpoint = torch.load(args.model_path, map_location=device)
+        if isinstance(checkpoint, dict) and 'agent' in checkpoint:
+            agent.load_state_dict(checkpoint['agent'])
+        else:
+            agent.load_state_dict(checkpoint)
         
         print("Running evaluation...")
         avg_reward, avg_length, episode_rewards, action_counts = evaluate_agent(
